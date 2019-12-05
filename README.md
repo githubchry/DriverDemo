@@ -14,6 +14,8 @@ sudo insmod chrdev_demo.ko
 
 查看申请到的设备名，设备号
 cat /proc/devices   
+ls -l /sys/class/chryclass/hello
+ls -l /dev/hello
 
 卸载模块
 sudo rmmod chrdev_demo

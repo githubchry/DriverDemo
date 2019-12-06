@@ -61,7 +61,7 @@ int chrdev_demo_open(struct inode *inode, struct file *flip)
     printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);
     return 0;
 }
-
+// 执行命令：sudo cat /dev/chrdev_demo 可以从dmesg看到open和release被调用
 int chrdev_demo_release(struct inode *inode, struct file *flip)
 {
     printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);

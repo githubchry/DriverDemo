@@ -16,6 +16,7 @@ sudo insmod chrdev_demo.ko
 cat /proc/devices   
 ls -l /sys/class/chryclass/hello
 ls -l /dev/hello
+sudo cat /dev/chrdev_demo 
 
 卸载模块
 sudo rmmod chrdev_demo

@@ -1,8 +1,11 @@
-PLAT?=x86
+PLAT?=rk3288
+
+# 模块名
+NAME = gpio_demo
 
 ifneq ($(KERNELRELEASE),)
 
-obj-m := chrdev_demo.o
+obj-m := $(NAME).o
 
 else
 
@@ -18,8 +21,15 @@ PWD:=$(shell pwd)
 
 module:
 	make -C $(KERNELDIR) M=$(PWD) modules
-	#cp *.ko $(PWD)
-.PHONY:clean
+	cp *.ko /home/chry/mnt/rk3288
+
 clean:
 	make -C $(KERNELDIR) M=$(PWD) clean
+# 这两个也就是测试用一下 以后编译完直接把模块上传上去 根本用不到这个
+load:
+	sudo insmod $(NAME).ko
+
+unload:
+	sudo rmmod $(NAME)
+
 endif

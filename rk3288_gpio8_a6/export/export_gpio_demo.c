@@ -1,12 +1,8 @@
-
 #include <linux/module.h>
 #include <linux/delay.h>     // msleep_interruptible
 #include <asm/gpio.h>     // GPIO头文件
 
 #define RK3288_GPIO8_A6  254
-#define CLASS       "chry"
-#define NAME        "gpio_demo"
-
 
 static int __init gpio_demo_init(void)
 {
@@ -19,9 +15,14 @@ static int __init gpio_demo_init(void)
         goto err1;
     }
 
-    // 2. 设置gpio248的输入输出方向为输出, 同时输出1(高电平)
-    // echo out > direction + echo 0 > value = echo low > direction
-    // echo out > direction + echo 1 > value = echo high > direction
+    /* 
+    2. 设置gpio248的输入输出方向为输出, 同时输出1(高电平)
+    echo out > direction + echo 0 > value = echo low > direction
+    echo out > direction + echo 1 > value = echo high > direction
+    gpio_set_value()与gpio_direction_output()有什么区别？
+    如果使用该GPIO时，不会动态的切换输入输出，建议在开始时就设置好GPIO 输出方向，后面拉高拉低时使用gpio_set_value()接口，而不建议使用gpio_direction_output(), 
+    因为gpio_direction_output接口里面有mutex锁，对中断上下文调用会有错误异常，且相比 gpio_set_value，gpio_direction_output 所做事情更多，浪费。
+    */
     ret = gpio_direction_output(RK3288_GPIO8_A6, 1); 
     if(ret != 0)
     {

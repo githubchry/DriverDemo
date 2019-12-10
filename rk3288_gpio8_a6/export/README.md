@@ -1,4 +1,3 @@
-```
 # 命令行控制rk3288 gpio
     
 参考：
@@ -59,6 +58,19 @@ A7 B1
 gpio8的起始引脚为248
 A6表示第一组的第六个脚，得出number = 248 + 6 = 254.
 
+附 firefly-rk3288 设备树引用GPIO引脚计算 跟上面对不上 后面再验证
+例如: GPIO5_B4
+GPIO5 BANK = 5
+PIN计算: A=0 B=1 C=2 D=3
+例如: B4 PIN = 1 * 8 + 4 = 12
+gpionumber = BANK * 32 + PIN
+gpionumber为 5 * 32 + 1 * 8 + 4 = 172
+设备树中引用为:
+gpios = <&(gpio label) PIN GPIO_ACTIVE_LOW>;
+gpios = <&gpio5 12 GPIO_ACTIVE_LOW>;
+以此类推.
+
+
 ## 1.导出gpio254
 ``` shell
 root@localhost:/sys/class/gpio# echo 254 > export
@@ -89,6 +101,3 @@ root@localhost:/sys/class/gpio# echo 254 > unexport
 ```
 # 编写驱动代码实现以上四步
 见源码。
-
-
-```

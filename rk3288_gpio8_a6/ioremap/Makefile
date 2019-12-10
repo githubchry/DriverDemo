@@ -1,7 +1,7 @@
 PLAT?=rk3288
 
 # 模块名
-NAME = gpio_demo
+NAME = ioremap_gpio_demo
 
 ifneq ($(KERNELRELEASE),)
 

@@ -57,7 +57,7 @@ static int gpio_demo_open(struct inode *inode, struct file *flip)
     return 0;
 }
 // 执行命令：sudo cat /dev/gpio_demo 可以从dmesg看到open、read、release被调用
-// 执行命令：sudo echo 1 > /dev/gpio_demo 可以从dmesg看到open、write、release被调用
+// 执行命令：sudo sh -c "echo 1 > /dev/gpio_demo" 可以从dmesg看到open、write、release被调用
 static int gpio_demo_release(struct inode *inode, struct file *flip)
 {
     printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);

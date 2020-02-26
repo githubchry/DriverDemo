@@ -4,8 +4,7 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/device.h>
-
-#include "chry_math.h"
+#include <linux/uaccess.h>      // copy_from_user()
 
 #define BASEMINOR   0
 #define COUNT       3
@@ -69,6 +68,65 @@ int chrdev_demo_release(struct inode *inode, struct file *flip)
     printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);
     return 0;
 }
+
+#define KNBUFLEN 32
+static char knbuf[KNBUFLEN] = "";
+//从设备中同步读取数据 把内核空间的knbuf拷贝到用户空间  pos表示偏移量，指示从文件的哪里开始读取
+static ssize_t chrdev_demo_read(struct file *flip, char __user *buf, size_t len, loff_t *pos)
+{
+    ssize_t ret = 0; 
+
+    printk(KERN_INFO "%s,%s:%d len:%ld, pos:%lld\n", __FILE__, __func__, __LINE__, len, *pos);   
+
+    if(*pos >= KNBUFLEN)
+    {
+        return 0;
+    }
+
+    if(len < KNBUFLEN)
+    {
+        //return -ENOMEM;
+    }
+
+    ret = len > KNBUFLEN ? KNBUFLEN : len;
+    // 将内核空间的数据拷贝到用户空间 成功返回0，失败返回没有拷贝成功的数据字节数 
+    ret = copy_to_user(buf, knbuf, ret);   
+    if(0 != ret)
+	{
+        printk(KERN_ERR "%s,%s:%d %ld\n", __FILE__, __func__, __LINE__, ret);
+		return -EFAULT;	
+	}
+    *pos += len;
+    // 理论上可以直接将buf的地址指向到knbuf  但不建议这么做 危害很大 比如传入buf为null 内核就爆炸了 
+    //copy_to_user里面会对异常情况做判断处理
+
+    return len;
+}
+
+//向设备发送数据
+static ssize_t chrdev_demo_write(struct file *flip, const char __user *buf, size_t len, loff_t *pos)
+{   
+    ssize_t ret = 0;
+    //这里不能直接打印用户空间传进来的数据
+    printk(KERN_INFO "%s,%s:%d len:%ld\n", __FILE__, __func__, __LINE__, len);   
+
+    if(len < 1/*|| len > KNBUFLEN*/)    
+    {
+        return -EINVAL;
+    }
+
+    ret = len > KNBUFLEN ? KNBUFLEN : len;
+    // 将用户空间的数据拷贝到内核空间 不能在内核空间直接访问用户空间的数据，比如打印判断等操作 访问权限问题会导致内核崩溃
+    if(copy_from_user(knbuf, buf, ret))
+	{
+		return -EFAULT;	
+	}
+    
+    printk(KERN_INFO "%s,%s:%d => %s\n", __FILE__, __func__, __LINE__, knbuf);
+
+    return ret;  
+}
+
 /*
 各成员解析：https://blog.csdn.net/zqixiao_09/article/details/50850475
 系统调用通过设备文件的主设备号找到相应的设备驱动程序，然后读取这个数据结构相应的函数指针，接着把控制权交给该函数，这是Linux的设备驱动程序工作的基本原理。
@@ -95,6 +153,8 @@ struct file_operations fops = {
     .owner      = THIS_MODULE,          //拥有该结构的模块的指针，一般为THIS_MODULES 这个成员用来在它的操作还在被使用时阻止模块被卸载
     .open       = chrdev_demo_open,     
     .release    = chrdev_demo_release,
+    .read       = chrdev_demo_read,     
+    .write      = chrdev_demo_write,
 };
 /*
 全局数组 chrdevs 包含了255(CHRDEV_MAJOR_HASH_SIZE 的值)个 struct char_device_struct的元素，每一个对应一个相应的主设备号。
@@ -143,10 +203,6 @@ static int __init chrdev_demo_init(void)
 	}
 
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
-
-    // 测试调用另一个模块的接口 
-    printk(KERN_INFO "chry_add(123,45) = %d, chry_sub(123,45) = %d\n", 
-        chry_add(123, 45), chry_sub(123, 45));
 
     return 0;
     

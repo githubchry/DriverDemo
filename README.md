@@ -17,7 +17,19 @@ sudo insmod chrdev_demo.ko
 cat /proc/devices   
 ls -l /sys/class/chry/chrdev_demo/
 ls -l /dev/chrdev_demo
+
+读设备
 cat /dev/chrdev_demo 
+
+写设备
+sudo echo 'hello world' > /dev/chrdev_demo
+可能会出现权限错误,因为使用 sudo 只是让 echo 命令具有了 root 权限，但是没有让 “>” 和 ">>" 命令也具有 root 权限
+正确的方式:
+sudo sh -c "echo 'hello world' > /dev/chrdev_demo"
+或者
+echo 'hello world' | sudo tee /dev/chrdev_demo
+注意，tee 命令的 "-a" 选项的作用等同于 ">>" 命令，如果去除该选项，那么 tee 命令的作用就等同于 ">" 命令。
+
 
 卸载模块
 sudo rmmod chrdev_demo

@@ -10,6 +10,7 @@ make
 sudo dmesg -C
 
 加载模块
+sudo insmod chry_math.ko
 sudo insmod chrdev_demo.ko
 
 查看申请到的设备名，设备号
@@ -20,6 +21,7 @@ cat /dev/chrdev_demo
 
 卸载模块
 sudo rmmod chrdev_demo
+sudo rmmod chry_math
 
 查看内核打印
 dmesg
@@ -134,17 +136,6 @@ static bool clk_ignore_unused = true ;
 方法二：
 
 修改内核启动参数bootargs，追加`clk_ignore_unused`参数，然后保存save
-
-
-
-### ko与ko之间的相互调用
-
-#### 全局符号表 EXPORT_SYMBOL
-
-每个驱动都会提供一些接口供外部调用，当内核中的设备A的驱动接口想要让其他设备驱动去操作的时候，首先要做的就是把设备A的接口导出到全局符号表([EXPORT_SYMBOL](https://blog.csdn.net/qq_37858386/article/details/78444168))，导出之后才能让其他模块调用这些接口。
-
-类似用户空间的so动态库
-
 
 
 

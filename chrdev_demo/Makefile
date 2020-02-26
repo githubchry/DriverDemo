@@ -6,6 +6,7 @@ NAME = chrdev_demo
 ifneq ($(KERNELRELEASE),)
 
 obj-m := $(NAME).o
+obj-m += chry_math.o
 
 else
 

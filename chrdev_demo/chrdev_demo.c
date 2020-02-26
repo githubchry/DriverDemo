@@ -5,6 +5,8 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 
+#include "chry_math.h"
+
 #define BASEMINOR   0
 #define COUNT       3
 #define CLASS       "chry"
@@ -141,6 +143,10 @@ static int __init chrdev_demo_init(void)
 	}
 
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
+
+    // 测试调用另一个模块的接口 
+    printk(KERN_INFO "chry_add(123,45) = %d, chry_sub(123,45) = %d\n", 
+        chry_add(123, 45), chry_sub(123, 45));
 
     return 0;
     

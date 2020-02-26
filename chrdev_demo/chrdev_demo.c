@@ -2,7 +2,7 @@
 #include <linux/module.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
-#include <linux/slab.h>
+#include <linux/slab.h>     //kmalloc
 #include <linux/device.h>
 #include <linux/uaccess.h>      // copy_from_user()
 
@@ -11,35 +11,42 @@
 #define CLASS       "chry"
 #define NAME        "chrdev_demo"
 
-/*
-在Linux内核中：
-    使用cdev结构体来描述字符设备;
-    通过其成员dev_t来定义设备号（分为主、次设备号）以确定字符设备的唯一性;
-    通过其成员file_operations来定义字符设备驱动提供给VFS的接口函数，如常见的open()、read()、write()等;
+#define KNBUFLEN 32
+struct chrdev_demo_desc
+{
+    /*
+    在Linux内核中：
+        使用cdev结构体来描述字符设备;
+        通过其成员dev_t来定义设备号（分为主、次设备号）以确定字符设备的唯一性;
+        通过其成员file_operations来定义字符设备驱动提供给VFS的接口函数，如常见的open()、read()、write()等;
 
-struct cdev { 
-	struct kobject kobj;                  //内嵌的内核对象.
-	struct module *owner;                 //该字符设备所在的内核模块的对象指针.
-	const struct file_operations *ops;    //该结构描述了字符设备所能实现的方法，是极为关键的一个结构体.
-	struct list_head list;                //用来将已经向内核注册的所有字符设备形成链表.
-	dev_t dev;                            //字符设备的设备号，由主设备号和次设备号构成.
-	unsigned int count;                   //隶属于同一主设备号的次设备号的个数.
+    struct cdev { 
+        struct kobject kobj;                  //内嵌的内核对象.
+        struct module *owner;                 //该字符设备所在的内核模块的对象指针.
+        const struct file_operations *ops;    //该结构描述了字符设备所能实现的方法，是极为关键的一个结构体.
+        struct list_head list;                //用来将已经向内核注册的所有字符设备形成链表.
+        dev_t dev;                            //字符设备的设备号，由主设备号和次设备号构成.
+        unsigned int count;                   //隶属于同一主设备号的次设备号的个数.
+    };
+    */
+    struct cdev cdev;
+    dev_t devno;  
+
+    /*
+    内核中定义的struct class结构体，顾名思义，一个struct class结构体类型变量对应一个类，
+    内核同时提供了class_create(…)函数，可以用它来创建一个类，
+    这个类存放于sysfs下面，一旦创建好了这个类，
+    再调用 device_create(…)函数来在/dev目录下创建相应的设备节点。
+    这样，加载模块的时候，用户空间中的udev会自动响应 device_create()函数，去/sysfs下寻找对应的类从而创建设备节点。
+    */
+
+    struct class *cls;
+    struct device *dev;
+
+    char knbuf[KNBUFLEN];
 };
-*/
 
-struct cdev cdev;
-dev_t devno;  
-
-/*
-内核中定义的struct class结构体，顾名思义，一个struct class结构体类型变量对应一个类，
-内核同时提供了class_create(…)函数，可以用它来创建一个类，
-这个类存放于sysfs下面，一旦创建好了这个类，
-再调用 device_create(…)函数来在/dev目录下创建相应的设备节点。
-这样，加载模块的时候，用户空间中的udev会自动响应 device_create()函数，去/sysfs下寻找对应的类从而创建设备节点。
-*/
-
-static struct class *cls = NULL;
-static struct device *dev = NULL;
+struct chrdev_demo_desc *chrdev_demo_dev = NULL;
 
 /*
 用户空间使用 open() 函数打开一个字符设备 fd = open("/dev/hello",O_RDWR) 
@@ -69,8 +76,6 @@ int chrdev_demo_release(struct inode *inode, struct file *flip)
     return 0;
 }
 
-#define KNBUFLEN 32
-static char knbuf[KNBUFLEN] = "";
 //从设备中同步读取数据 把内核空间的knbuf拷贝到用户空间  pos表示偏移量，指示从文件的哪里开始读取
 static ssize_t chrdev_demo_read(struct file *flip, char __user *buf, size_t len, loff_t *pos)
 {
@@ -90,7 +95,7 @@ static ssize_t chrdev_demo_read(struct file *flip, char __user *buf, size_t len,
 
     ret = len > KNBUFLEN ? KNBUFLEN : len;
     // 将内核空间的数据拷贝到用户空间 成功返回0，失败返回没有拷贝成功的数据字节数 
-    ret = copy_to_user(buf, knbuf, ret);   
+    ret = copy_to_user(buf, chrdev_demo_dev->knbuf, ret);   
     if(0 != ret)
 	{
         printk(KERN_ERR "%s,%s:%d %ld\n", __FILE__, __func__, __LINE__, ret);
@@ -117,12 +122,12 @@ static ssize_t chrdev_demo_write(struct file *flip, const char __user *buf, size
 
     ret = len > KNBUFLEN ? KNBUFLEN : len;
     // 将用户空间的数据拷贝到内核空间 不能在内核空间直接访问用户空间的数据，比如打印判断等操作 访问权限问题会导致内核崩溃
-    if(copy_from_user(knbuf, buf, ret))
+    if(copy_from_user(chrdev_demo_dev->knbuf, buf, ret))
 	{
 		return -EFAULT;	
 	}
     
-    printk(KERN_INFO "%s,%s:%d => %s\n", __FILE__, __func__, __LINE__, knbuf);
+    printk(KERN_INFO "%s,%s:%d => %s\n", __FILE__, __func__, __LINE__, chrdev_demo_dev->knbuf);
 
     return ret;  
 }
@@ -163,23 +168,32 @@ struct file_operations fops = {
 static int __init chrdev_demo_init(void)
 {
     int ret = 0;
+    //GFP_KERNEL:如果当前空间不够用,该函数会一直阻塞
+    chrdev_demo_dev = kmalloc(sizeof(struct chrdev_demo_desc), GFP_KERNEL);
+    if (NULL == chrdev_demo_dev)
+    {
+        printk(KERN_ERR "%s,%s:%d kmalloc failed\n", __FILE__, __func__, __LINE__);
+        ret = -ENOMEM;
+        goto err0;
+    }
+    
     // 1.模块加载函数通过 register_chrdev_region 或 alloc_chrdev_region 来静态或者动态获取设备号;
     // 老版本内核中使用register_chrdev接口, 但是会造成资源浪费，新版内核被弃用.
     // 三个函数下面其实都是对__register_chrdev_region() 的调用
     // 通过命令查看效果：cat /proc/devices | grep chrdev_demo
-    ret = alloc_chrdev_region(&devno, BASEMINOR, COUNT, NAME);
+    ret = alloc_chrdev_region(&chrdev_demo_dev->devno, BASEMINOR, COUNT, NAME);
     if(ret < 0)
     {
         printk(KERN_ERR "%s,%s:%d failed %d \n", __FILE__, __func__, __LINE__, ret);
         goto err1;
     }
-    printk(KERN_INFO "%s,%s:%d> major = %d\n", __FILE__, __func__, __LINE__, MAJOR(devno));
+    printk(KERN_INFO "%s,%s:%d> major = %d\n", __FILE__, __func__, __LINE__, MAJOR(chrdev_demo_dev->devno));
     
     // 2. 通过 cdev_init 建立cdev与 file_operations之间的连接
-    cdev_init(&cdev, &fops);
+    cdev_init(&chrdev_demo_dev->cdev, &fops);
 
     // 3. 通过 cdev_add 向系统添加一个cdev以完成注册;
-    ret = cdev_add(&cdev, devno, COUNT);
+    ret = cdev_add(&chrdev_demo_dev->cdev, chrdev_demo_dev->devno, COUNT);
     if (ret < 0)
     {
         printk(KERN_ERR "%s,%s:%d failed %d \n", __FILE__, __func__, __LINE__, ret);
@@ -187,18 +201,20 @@ static int __init chrdev_demo_init(void)
     }
     
     // 4.新建chry class 通过命令查看效果：ls -l /sys/class/chry
-    cls = class_create(THIS_MODULE, CLASS);
-    if((ret = IS_ERR(cls)))
+    chrdev_demo_dev->cls = class_create(THIS_MODULE, CLASS);
+    if(IS_ERR(chrdev_demo_dev->cls))
 	{
         printk(KERN_ERR "%s,%s:%d failed %d \n", __FILE__, __func__, __LINE__, ret);
+        ret = PTR_ERR(chrdev_demo_dev->cls);
         goto err3;
 	}
 
     // 5.在chry class下创建节点, 相当于mknod /dev/chrdev_demo 通过命令查看效果：ls -l /sys/class/chry/chrdev_demo /dev/chrdev_demo
-    dev = device_create(cls, NULL, devno, NULL, NAME); 
-    if((ret = IS_ERR(dev)))
+    chrdev_demo_dev->dev = device_create(chrdev_demo_dev->cls, NULL, chrdev_demo_dev->devno, NULL, NAME); 
+    if(IS_ERR(chrdev_demo_dev->dev))
 	{
         printk(KERN_ERR "%s,%s:%d failed %d \n", __FILE__, __func__, __LINE__, ret);
+        ret = PTR_ERR(chrdev_demo_dev->dev);
         goto err4;
 	}
 
@@ -207,25 +223,27 @@ static int __init chrdev_demo_init(void)
     return 0;
     
 //err5:
-    device_destroy(cls, devno);
+    device_destroy(chrdev_demo_dev->cls, chrdev_demo_dev->devno);
 err4:
-    class_destroy(cls);
+    class_destroy(chrdev_demo_dev->cls);
 err3:
-    cdev_del(&cdev);
+    cdev_del(&chrdev_demo_dev->cdev);
 err2:
-    unregister_chrdev_region(devno, COUNT);
+    unregister_chrdev_region(chrdev_demo_dev->devno, COUNT);
 err1:
+    kfree(chrdev_demo_dev);
+err0:
     return ret;
 }
 
 
 static void __exit chrdev_demo_exit(void)
 {
-    device_destroy(cls, devno);
-    class_destroy(cls);
-    cdev_del(&cdev);
-    unregister_chrdev_region(devno, COUNT);
-    
+    device_destroy(chrdev_demo_dev->cls, chrdev_demo_dev->devno);
+    class_destroy(chrdev_demo_dev->cls);
+    cdev_del(&chrdev_demo_dev->cdev);
+    unregister_chrdev_region(chrdev_demo_dev->devno, COUNT);
+    kfree(chrdev_demo_dev);
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 }
 

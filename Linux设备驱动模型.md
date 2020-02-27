@@ -188,9 +188,17 @@ sysfs中的bus目录层级在一定程度上验证了上节中说的设备驱动
 
 ​		一般情况下，我们都是在kernel中已有的总线上去开放设备驱动程序，如 usb_bus_type、spi_bus_type、pci_bus_type、platform_bus_type、i2c_bus_type 等，内核中已经实现了这些总线的总线驱动，我们只需实现设备device和驱动driver。
 
+----------------
 
+下面从0开始实现总线模型，详见bus_demo文件夹。
 
-计划实现一个总线驱动和一个总线设备驱动。
+里面包括3个源文件:
 
-（先写到这里，转而去写代码，后面再补充）
+chrybus_demo.c
+
+chrydev_demo.c
+
+chrydrv_demo.c
+
+分别实现上文里面的总线/设备/驱动代码.
 

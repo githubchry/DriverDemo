@@ -33,11 +33,11 @@ struct chrdev_demo_desc
     dev_t devno;  
 
     /*
-    内核中定义的struct class结构体，顾名思义，一个struct class结构体类型变量对应一个类，
+    内核中定义的struct class结构体，顾名思义，一个struct class结构体类型变量对应一个类，或者说设备类型，
     内核同时提供了class_create(…)函数，可以用它来创建一个类，
-    这个类存放于sysfs下面，一旦创建好了这个类，
+    这个类存放于sysfs下面(/sys/class/类名)，一旦创建好了这个类，
     再调用 device_create(…)函数来在/dev目录下创建相应的设备节点。
-    这样，加载模块的时候，用户空间中的udev会自动响应 device_create()函数，去/sysfs下寻找对应的类从而创建设备节点。
+    这样，加载模块的时候，用户空间中的udev会自动响应 device_create()函数，去/sys/class/下寻找对应的类从而创建设备节点。
     */
 
     struct class *cls;
@@ -134,7 +134,8 @@ static ssize_t chrdev_demo_write(struct file *flip, const char __user *buf, size
 
 /*
 各成员解析：https://blog.csdn.net/zqixiao_09/article/details/50850475
-系统调用通过设备文件的主设备号找到相应的设备驱动程序，然后读取这个数据结构相应的函数指针，接着把控制权交给该函数，这是Linux的设备驱动程序工作的基本原理。
+系统调用通过设备文件的主设备号找到相应的设备驱动程序，然后读取这个数据结构相应的函数指针，
+接着把控制权交给该函数，这是Linux的设备驱动程序工作的基本原理。
 
 在fs.h中有定义了一个全局的extern const struct file_operations def_chr_fops;
 具体的实现在char_dev.c

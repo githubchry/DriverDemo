@@ -1,15 +1,28 @@
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/cdev.h>
-#include <linux/fs.h>
-#include <linux/slab.h>     //kmalloc
 #include <linux/device.h>
-#include <linux/uaccess.h>      // copy_from_user()
 
-
+int chrybus_match(struct device *dev, struct device_driver *drv)
+{
+    //匹配规则自己定，一般以name为依据
+    if (0 == strcmp(drv->name, dev->kobj.name))
+    //if (0 == strncmp(drv->name, dev->kobj.name, strlen("chry")))
+    {
+        printk(KERN_INFO "%s,%s:%d match sucess!: [%s, %s]\n", __FILE__, __func__, __LINE__, drv->name, dev->kobj.name);
+        return 1;
+    }
+    else
+    {
+        printk(KERN_INFO "%s,%s:%d match failed!: [%s, %s]\n", __FILE__, __func__, __LINE__, drv->name, dev->kobj.name);
+        return 0;
+    }
+    
+    return 0;
+}
 
 struct bus_type chrybus = {
-    .name      = "chrybus",
+    .name       = "chrybus",
+    .match      = chrybus_match,    //如果没有实现match接口，默认匹配成功
 };
 
 EXPORT_SYMBOL(chrybus);

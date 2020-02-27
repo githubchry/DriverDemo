@@ -202,3 +202,12 @@ chrydrv_demo.c
 
 分别实现上文里面的总线/设备/驱动代码.
 
+测试方法：
+``` shell
+sudo insmod chrybus_demo.ko;sudo insmod chrydev_demo.ko;sudo insmod chrydrv_demo.ko;
+
+dmesg;sudo dmesg -C
+
+sudo rmmod chrydrv_demo chrydev_demo chrybus_demo 
+```
+

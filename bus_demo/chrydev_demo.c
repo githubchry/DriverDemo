@@ -3,9 +3,16 @@
 #include <linux/device.h>
 
 extern struct bus_type chrybus;
+
+void chrydev_release(struct device *dev)
+{
+    printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);
+}
+
 struct device chrydev = {
     .init_name      = "chrydev",
     .bus            = &chrybus,
+    .release        = chrydev_release,  //暂无作用，仅为了消除dmesg警告
 };
 
 static int __init busdev_demo_init(void)

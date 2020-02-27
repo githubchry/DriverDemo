@@ -10,8 +10,11 @@
 #define COUNT       3
 #define CLASS       "chry"
 #define NAME        "chrdev_demo"
-
 #define KNBUFLEN 32
+
+extern int chry_add(int a, int b);
+extern int chry_sub(int a, int b);
+
 struct chrdev_demo_desc
 {
     /*
@@ -218,7 +221,10 @@ static int __init chrdev_demo_init(void)
         ret = PTR_ERR(chrdev_demo_dev->dev);
         goto err4;
 	}
-
+    
+    // 测试调用另一个模块的接口 
+    printk(KERN_INFO "chry_add(123,45) = %d, chry_sub(123,45) = %d\n", 
+        chry_add(123, 45), chry_sub(123, 45));
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 
     return 0;

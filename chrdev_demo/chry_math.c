@@ -1,6 +1,5 @@
 #include <linux/init.h>
 #include <linux/module.h>
-#include "chry_math.h"
 
 int chry_add(int a, int b)
 {

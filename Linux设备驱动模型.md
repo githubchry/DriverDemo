@@ -201,7 +201,7 @@ chrydev_demo.c
 chrydrv_demo.c
 
 分别实现上文里面的总线/设备/驱动代码.
-
+代码上的分离，使用时要合在一起
 测试方法：
 ``` shell
 sudo insmod chrybus_demo.ko;sudo insmod chrydev_demo.ko;sudo insmod chrydrv_demo.ko;
@@ -210,4 +210,4 @@ dmesg;sudo dmesg -C
 
 sudo rmmod chrydrv_demo chrydev_demo chrybus_demo 
 ```
-
+这便是总线模型最基本最本质的实现，以后我们遇到的i2c总线/spi总线/usb总线/platform平台总线等，都是遵从这一套模型的

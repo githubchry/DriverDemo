@@ -5,8 +5,8 @@
 int chrybus_match(struct device *dev, struct device_driver *drv)
 {
     //匹配规则自己定，一般以name为依据
-    if (0 == strcmp(drv->name, dev->kobj.name))
-    //if (0 == strncmp(drv->name, dev->kobj.name, strlen("chry")))
+    //if (0 == strcmp(drv->name, dev->kobj.name))
+    if (0 == strncmp(drv->name, dev->kobj.name, strlen("chry")))
     {
         printk(KERN_INFO "%s,%s:%d match sucess!: [%s, %s]\n", __FILE__, __func__, __LINE__, drv->name, dev->kobj.name);
         return 1;

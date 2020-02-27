@@ -2,11 +2,18 @@
 #include <linux/module.h>
 #include <linux/device.h>
 
+#include "chrydev_info.h"
+
 extern struct bus_type chrybus;
 
 int chrydrv_probe(struct device *dev)
 {
-    printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);
+    struct chrydev_platform_data *pdesc = (struct chrydev_platform_data *)dev->platform_data;
+
+    printk(KERN_INFO "%s,%s:%d name:%s, irqno:%d, phyaddr：0x%x\n", __FILE__, __func__, __LINE__, pdesc->name, pdesc->irqno, pdesc->phyaddr);
+
+    //拿到寄存器地址，然后ioremap映射成虚拟地址，然后操作。。。。
+    
     return 0;
 }
 

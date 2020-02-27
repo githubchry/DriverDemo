@@ -2,6 +2,8 @@
 #include <linux/module.h>
 #include <linux/device.h>
 
+#include "chrydev_info.h"
+
 extern struct bus_type chrybus;
 
 void chrydev_release(struct device *dev)
@@ -9,10 +11,17 @@ void chrydev_release(struct device *dev)
     printk(KERN_INFO "%s,%s:%d\n", __FILE__, __func__, __LINE__);
 }
 
+struct chrydev_platform_data chrydev_info = {
+    .name           = "hello",
+    .irqno          = 9999,
+    .phyaddr       = 0x12345678,
+};
+
 struct device chrydev = {
     .init_name      = "chrydev",
     .bus            = &chrybus,
     .release        = chrydev_release,  //暂无作用，仅为了消除dmesg警告
+    .platform_data  = &chrydev_info,
 };
 
 static int __init busdev_demo_init(void)

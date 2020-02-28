@@ -1,3 +1,5 @@
+[参考](https://blog.csdn.net/set_mode/article/details/92845858)
+
 非特殊说明情况下，本文讨论的**设备**皆为**字符设备**，**驱动**皆为**字符设备驱动**。**总线**表示一个**内核代码结构体对象**而不是物理意义上的总线。
 
 # 字符设备驱动开发流程
@@ -5,11 +7,8 @@
 首先做如下总结
 
 1. 实现入口函数xxx_init()和卸载函数xxx_exit()
-
 2. 申请设备号 alloc_chrdev_region()
-
 3. 初始化cdev_init(), 注册cdev_add(), 创建类和节点class_create(), device_create()
-
 4. 硬件部分初始化
    - 查阅datasheet获取寄存器地址：基地址 + 偏移量 
    - 映射虚拟寄存器地址ioremap()
@@ -115,13 +114,11 @@ chry@chry-ubuntu20:/sys/class/input/event0/device$
   - 层级结构根据设备**分层**展示所有设备信息
   - 其他目录基本是分类组织链接文件，**实际通过链接方式(symlink)指向该目录内容**
   - 直接映射到内核设备树
-
 - `/sys/class`
   - 层级结构根据设备**分类**展示所有设备信息
   - 可以看到设备分成了哪些类别，各类别下有哪些设备
   - 通过class_create()创建的类会显示在这里
   - 通过device_create()创建的节点会显示在对应的类目录下
-
 - `/sys/bus`
   - 层级结构根据**总线类型**展示挂载在各总线上的设备信息，每个子目录都是kernel支持并且已经注册了的总线类型
   - 每个子目录下都有`devices`和`drivers`两个目录
@@ -161,8 +158,10 @@ sysfs中的bus目录层级在一定程度上验证了上节中说的设备驱动
      返回值大于0表示匹配成功，没有定义match函数默认匹配成功
 
    - 如果match成功，并且该device没有绑定其他driver（!device->driver），调用readlly_probe()，在里面先设置device->driver指向driver，然后尝试probe device。
+
      - 如果调用bus_type定义了probe，bus_typed->probe(device)
      - 否则调用driver->probe(device)，如果driver也没有定义probe，会被当做probe陈成功。
+
    - 如果probe返回0，配对成功，将device插入到driver的链表中；返回非0表示配对失败，将device->driver置NULL
 
 ### 注册设备
@@ -188,7 +187,7 @@ sysfs中的bus目录层级在一定程度上验证了上节中说的设备驱动
 
 ​		一般情况下，我们都是在kernel中已有的总线上去开放设备驱动程序，如 usb_bus_type、spi_bus_type、pci_bus_type、platform_bus_type、i2c_bus_type 等，内核中已经实现了这些总线的总线驱动，我们只需实现设备device和驱动driver。
 
-----------------
+------
 
 下面从0开始实现总线模型，详见bus_demo文件夹。
 
@@ -203,11 +202,174 @@ chrydrv_demo.c
 分别实现上文里面的总线/设备/驱动代码.
 代码上的分离，使用时要合在一起
 测试方法：
-``` shell
+
+```shell
 sudo insmod chrybus_demo.ko;sudo insmod chrydev_demo.ko;sudo insmod chrydrv_demo.ko;
 
 dmesg;sudo dmesg -C
 
 sudo rmmod chrydrv_demo chrydev_demo chrybus_demo 
 ```
-这便是总线模型最基本最本质的实现，以后我们遇到的i2c总线/spi总线/usb总线/platform平台总线等，都是遵从这一套模型的
+
+这便是总线模型最基本最本质的实现，以后我们遇到的i2c总线/spi总线/usb总线/platform总线等，都是遵从这一套模型的。
+
+**此外，在设备驱动模型里，这些总线对象都已经实现了，我们只需要关注设备对象和驱动对象。**
+
+每种类型的总线实现特定功能，相对于USB、PCI、I2C、SPI等物理总线来说，platform总线是一种虚拟、抽象出来的总线，实际中并不存在这样的总线。同时platform总线也是比较容易理解的总线，下面便从platform总线开始着手学习总线模型编程。
+
+另外，
+
+## 平台总线(platform bus)模型
+
+[参考](https://www.cnblogs.com/deng-tao/p/6026373.html)
+
+### 为什么要有平台总线？
+
+在日常项目产品开发中，更换soc是很常见的情形，比如从rk3288升级到rk3399甚至hi3559，那么对于已经在rk3288开发好的驱动（在各平台具有共性的驱动比如gpio，uart驱动等）怎么移植到新的平台呢？
+
+在没有引入platform bus的情况下，往往需要把相似的代码写多遍（每个平台一遍），那就产生了大部分重复代码，举例：
+
+gpio驱动开发逻辑：
+
+1. 配置gpio的输入输出方向——方向寄存器
+2. 配置gpio的电平信号——数据寄存器
+
+uart驱动开发逻辑：
+
+1. 配置波特率、停止位、数据位和校验位——xxx寄存器
+2. 时序，行控，流控——xxx寄存器
+
+
+
+不管在哪个平台，操作逻辑基本都是一样的，唯一不同的就是**寄存器地址**还有**中断号**。
+
+这对一个有信仰的程序员来说是简直就是罪恶！有没有办法仅修改设备而platform bus就为我们解决了这个问题。
+
+platform bus特性：device(中断/地址)和driver(操作逻辑)分离
+
+在更换soc的时候只需要更改device信息即可。
+
+### 数据结构
+
+​		在内核代码(设备驱动模型)里，用device_driver结构体表示驱动(下面就简称为driver)，device结构体表示设备，bus_type结构体表示总线。
+
+前文也提到过，包括platform bus在内，设备驱动模型已经实现了各种常见类型的总线对象，我们**只需要关注设备对象和驱动对象**，所以我们不需要开发platform_bus_type结构体对象，但为了更好理解platform bus，我们应该去了解它具体的实现方式。
+
+#### 总线对象：platform_bus_type
+
+以下是内核中已经定义好的platform bus对象，开机就会初始化：
+
+```c
+struct bus_type platform_bus_type = {
+    .name		= "platform",
+    .dev_groups	= platform_dev_groups,
+    .match		= platform_match,
+    .uevent		= platform_uevent,
+    .pm		= &platform_dev_pm_ops,
+};
+```
+
+任何总线驱动开发，首先就是要学习它的匹配方法是什么，跟踪platform_match()可知platform bus的匹配规则：
+
+```c
+	struct platform_device *pdev = to_platform_device(dev);
+	struct platform_driver *pdrv = to_platform_driver(drv);
+	// 优先匹配driver里面的id_table，里面包含了所支持的各平台的名称，拿来跟pdev中的名字做匹配
+	if (pdrv->id_table)
+		return platform_match_id(pdrv->id_table, pdev) != NULL;
+
+	//如果driver里面的id_table为空，则直接匹配driver和device的名字
+	/* fall-back to driver name match */
+	return (strcmp(pdev->name, drv->name) == 0);
+```
+
+平台总线对象不需要我们去开发，了解它的匹配方法之后，我们就可以动手去**实例化**平台设备对象和平台驱动对象了。注意这里是实例化，因为内核代码中已经设计好了这两个对象的方法成员（结构体）。
+
+#### 设备对象：platform_device
+
+```c
+struct platform_device {           //platform总线设备
+    const char    * name;          //平台设备的名字
+    int        id;                 // ID 是用来区分如果设备名字相同的时候(通过在后面添加一个数字来代表不同的设备，因为有时候有这种需求) 不用时置为-1
+    struct device    dev;          // 内置的device结构体 继承了device父类
+    u32        num_resources;      // 资源结构体数量 可以有多个寄存器地址或中断信息
+    struct resource    * resource; // 指向一个资源结构体数组 用来描述设备的寄存器地址或中断信息
+    const struct platform_device_id    *id_entry; //用来进行与设备驱动匹配用的id_table表  
+    /* arch specific additions */
+    struct pdev_archdata    archdata;         //自留地    添加自己的东西
+};
+
+注册和注销
+	int platform_device_register(struct platform_device *dev);
+	void platform_device_unregister(struct platform_device *dev);
+
+设备资源结构体
+#include<linux/ioport.h>
+struct resource {
+	resource_size_t start;
+	resource_size_t end;
+	const char *name;		//描述 自定义
+	//flags区分当前描述的是内存(IORESOURCE_MEM)/中断(IORESOURCE_IRQ)/寄存器等等等等资源
+	unsigned long flags;	
+	struct resource *parent, *sibling, *child;	//可以看出是树状存储结构，不需关注，系统会搞定的
+};
+```
+
+#### 驱动对象：platform_driver
+
+```c
+struct platform_driver {
+    int (*probe)(struct platform_device *);     //这个probe函数其实和  device_driver中的是一样的功能，但是一般是使用device_driver中的那个
+    int (*remove)(struct platform_device *);    //卸载平台设备驱动的时候会调用这个函数，但是device_driver下面也有，具体调用的是谁这个就得分析了
+    void (*shutdown)(struct platform_device *);
+    int (*suspend)(struct platform_device *, pm_message_t state);
+    int (*resume)(struct platform_device *);
+    struct device_driver driver; 	//内置的device_driver 结构体  继承了device_driver父类
+    const struct platform_device_id *id_table;  //该设备驱动支持的设备的列表  他是通过这个指针去指向  platform_device_id 类型的数组
+};
+
+注册和注销  
+	int platform_driver_register(struct platform_driver *drv);
+	void platform_driver_unregister(struct platform_driver *drv);
+```
+
+------
+
+platform_device结构体继承了device父类，platform_driver结构体继承了device_driver父类，在注册设备和驱动对象时，它们的bus已经指定为platform_bus_type，不需要我们手动指定。
+
+另外，注册时实际上是把**父类**注册到platform_bus_type的两条链表中。
+
+那么如何通过结构体变量中某个成员的首地址进而获得整个结构体变量的首地址？
+
+linux中提供了`container_of`宏，该宏定义在include/linux/kernel.h中
+
+```c
+#define container_of(ptr, type, member) ({	    \
+	const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+	(type *)( (char *)__mptr - offsetof(type,member) );})
+```
+
+[container_of原理看这里](https://blog.csdn.net/npy_lp/article/details/7010752)
+
+前面`platform_match()`函数里面的`to_platform_device()`和`to_platform_driver()`就是对container_of宏进行封装而来。
+
+### 进入编码环节
+
+开发rk3288平台下的gpio驱动
+
+platform_gpiodev.c
+
+platform_gpiodrv.c
+
+分别实现gpio设备/驱动代码.
+测试方法：
+
+```shell
+sudo insmod platform_gpiodev.ko;sudo insmod platform_gpiodrv.ko;
+
+dmesg;sudo dmesg -C
+
+sudo rmmod platform_gpiodev platform_gpiodrv  
+```
+
+这便是总线模型最基本最本质的实现，以后我们遇到的i2c总线/spi总线/usb总线/platform总线等，都是遵从这一套模型的。

@@ -8,6 +8,8 @@ ifneq ($(KERNELRELEASE),)
 obj-m := $(NAME).o
 obj-m += chrydrv_demo.o
 obj-m += chrydev_demo.o
+obj-m += platform_gpiodev.o
+obj-m += platform_gpiodrv.o
 
 else
 

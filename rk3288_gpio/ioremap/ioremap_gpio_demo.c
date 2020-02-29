@@ -6,6 +6,7 @@
 #include <linux/delay.h>     // msleep_interruptible
 #include <linux/uaccess.h>      // copy_from_user()
 #include <asm/io.h>     // ioremap 头文件
+#include <linux/slab.h>     //kmalloc
 
 #define BASEMINOR   0
 #define COUNT       1
@@ -181,6 +182,16 @@ static int __init gpio_demo_init(void)
 #if !USE_BIT_OP_MODE
     uint32_t val = 0;
 #endif
+
+    //GFP_KERNEL:如果当前空间不够用,该函数会一直阻塞
+    gpio_demo_dev = kmalloc(sizeof(struct gpio_demo_desc), GFP_KERNEL);
+    if (NULL == gpio_demo_dev)
+    {
+        printk(KERN_ERR "%s,%s:%d kmalloc failed\n", __FILE__, __func__, __LINE__);
+        ret = -ENOMEM;
+        goto err0;
+    }
+
     // 1.模块加载函数通过 register_chrdev_region 或 alloc_chrdev_region 来静态或者动态获取设备号;
     // 老版本内核中使用register_chrdev接口, 但是会造成资源浪费，新版内核被弃用.
     // 三个函数下面其实都是对__register_chrdev_region() 的调用
@@ -286,6 +297,8 @@ err3:
 err2:
     unregister_chrdev_region(gpio_demo_dev->devno, COUNT);
 err1:
+    kfree(gpio_demo_dev);
+err0:
     return ret;
 }
 
@@ -310,6 +323,8 @@ static void __exit gpio_demo_exit(void)
     class_destroy(gpio_demo_dev->cls);
     cdev_del(&gpio_demo_dev->cdev);
     unregister_chrdev_region(gpio_demo_dev->devno, COUNT);
+    kfree(gpio_demo_dev);
+
     
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 }

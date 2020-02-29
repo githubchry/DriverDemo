@@ -32,6 +32,15 @@ struct led_desc *led_dev = NULL;
 ## 出错处理
 使用goto影子式编程做出错处理
 
+
+# vs code增加内核头文件
+.vscode/settings.json
+```
+    "C_Cpp.default.includePath": [
+        "/lib/modules/5.4.0-9-generic/build/include"
+    ]
+```
+
 # driver demo
 driver demo
 

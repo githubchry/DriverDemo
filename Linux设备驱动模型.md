@@ -133,15 +133,29 @@ sysfs中的bus目录层级在一定程度上验证了上节中说的设备驱动
 
 # 实现原理
 
-​		在内核代码(设备驱动模型)里，用device_driver结构体表示驱动(下面就简称为driver)，device结构体表示设备，bus_type结构体表示总线。
+在内核代码(设备驱动模型)里，用device_driver结构体表示驱动(下面就简称为driver)，device结构体表示设备，bus_type结构体表示总线。
 
-​		bus_type会包含driver链表和device链表，属于同一个bus_type的driver被插入到driver链表中，属于同一个bus_type的device被插入到device链表中。如此bus_type便实现了两者的间接关系。
+bus_type会包含driver链表和device链表，属于同一个bus_type的driver被插入到driver链表中，属于同一个bus_type的device被插入到device链表中。如此bus_type便实现了两者的间接关系。
 
-​		driver会包含device链表，probe成功的device会被插入到该链表。
+driver会包含device链表，probe成功的device会被插入到该链表。
 
-​		device结构体对象包含driver指针，probe成功时指向匹配的driver。
+device结构体对象包含driver指针，probe成功时指向匹配的driver。
 
-​		**如果在bus_type上的driver和device匹配成功，就会调用probe函数**
+**如果在bus_type上的driver和device匹配成功，就会调用probe函数。**
+
+匹配成功后可拿到设备对象包含的地址和中断等信息，在probe函数一般实现以下操作：
+
+1. 申请设备号 alloc_chrdev_region()
+2. 初始化cdev_init(), 注册cdev_add(), 创建类和节点class_create(), device_create()
+3. 硬件部分初始化
+   - 映射虚拟寄存器地址ioremap() 
+   - 注册中断
+   - ……
+4. 实现设备文件IO操作方法
+   - 前面第三步已经通过 cdev_init 建立cdev与 file_operations之间的连接
+   - 实现xxx_open(), xxx_release(), xxx_read(), xxx_write()等接口
+
+*熟悉的味道，熟悉的配方，没错，probe函数里面实现也就是最最开始时学习字符设备驱动开发的基础流程。*
 
 ## probe是如何被调用的
 
@@ -177,7 +191,7 @@ sysfs中的bus目录层级在一定程度上验证了上节中说的设备驱动
 
 解决方案二：修改device使它不能与其他driver匹配
 
-
+## 
 
 了解原理之后就可以开始锤键盘了
 
@@ -217,8 +231,6 @@ sudo rmmod chrydrv_demo chrydev_demo chrybus_demo
 
 每种类型的总线实现特定功能，相对于USB、PCI、I2C、SPI等物理总线来说，platform总线是一种虚拟、抽象出来的总线，实际中并不存在这样的总线。同时platform总线也是比较容易理解的总线，下面便从platform总线开始着手学习总线模型编程。
 
-另外，
-
 ## 平台总线(platform bus)模型
 
 [参考](https://www.cnblogs.com/deng-tao/p/6026373.html)
@@ -248,6 +260,8 @@ uart驱动开发逻辑：
 platform bus特性：device(中断/地址)和driver(操作逻辑)分离
 
 在更换soc的时候只需要更改device信息即可。
+
+补充：实际上大多数情况下平台总线更适用于相同品牌的soc，因为同样品牌下基地址不一样但是偏移基本一样，而不同品牌的基地址和偏移地址都不一样。当然可以通过一些手段解决，发挥聪明才智即可。
 
 ### 数据结构
 
@@ -372,4 +386,3 @@ dmesg;sudo dmesg -C
 sudo rmmod platform_gpiodev platform_gpiodrv  
 ```
 
-这便是总线模型最基本最本质的实现，以后我们遇到的i2c总线/spi总线/usb总线/platform总线等，都是遵从这一套模型的。

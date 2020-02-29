@@ -40,14 +40,25 @@ static void platform_gpiodev_release(struct device * dev)
 
 static struct resource gpio_res[] = {
     [0] = {
+        .start  = RK3288_GPIO0_DDR_BASE,
+        .end    = RK3288_GPIO0_DDR_BASE + 4 - 1,    //只用到DR和DDR两个地址, 每个地址占4字节, 从0开始算所以要-1
+        .flags  = IORESOURCE_MEM,
+    },
+    [1] = {
         .start  = RK3288_GPIO0_DR_BASE,
-        .end    = RK3288_GPIO0_BASE + 8 - 1,    //只用到DR和DDR两个地址, 每个地址占4字节, 从0开始算所以要-1
+        .end    = RK3288_GPIO0_DR_BASE + 4 - 1,    //只用到DR和DDR两个地址, 每个地址占4字节, 从0开始算所以要-1
         .flags  = IORESOURCE_MEM,
     },
     //中断资源 没用上，仅作演示
-    [1] = {
-        .start  = 666,  // IRQ_EINT(4),
-        .end    = 666,  //IRQ_EINT(4),      //中断没有连续的概念 所以开始和结束一样
+    //中断是没用上，但我把要操作地址位用中断资源表示并传过去，这不是规范的做法！别学！
+    [2] = {
+        .start  = RK3288_GPIO0A7_DDR_BIT,  // IRQ_EINT(4),
+        .end    = RK3288_GPIO0A7_DDR_BIT,  //IRQ_EINT(4),      //中断没有连续的概念 所以开始和结束一样
+        .flags  = IORESOURCE_IRQ,
+    },
+    [3] = {
+        .start  = RK3288_GPIO0A7_DR_BIT,  // IRQ_EINT(4),
+        .end    = RK3288_GPIO0A7_DR_BIT,  //IRQ_EINT(4),      //中断没有连续的概念 所以开始和结束一样
         .flags  = IORESOURCE_IRQ,
     }
 };

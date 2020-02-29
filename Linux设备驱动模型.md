@@ -382,7 +382,41 @@ platform_gpiodrv.c
 sudo insmod platform_gpiodev.ko;sudo insmod platform_gpiodrv.ko;
 
 dmesg;sudo dmesg -C
-
+// 执行命令：sudo cat /dev/gpio_demo 可以从dmesg看到open、read、release被调用
+// 执行命令：sudo sh -c "echo 1 > /dev/gpio_demo" 可以从dmesg看到open、write、release被调用
 sudo rmmod platform_gpiodev platform_gpiodrv  
 ```
 
+
+
+# 小结
+
+设备驱动模型归根结底是为了把硬件差异化的代码和通用代码分开。
+
+- 框架分层
+
+  - 上层		驱动 		通用代码		每种类型写一次
+
+  ------
+
+  - 核心层	总线 		通用代码		内核实现不用写
+
+  ------
+
+  - 底层		设备 		差异化代码	每个设备写一次
+
+- 面向对象
+
+  - 结构体表示对象
+  - 函数指针表示方法
+  - 内嵌结构体表示继承
+
+
+
+框架分层与面向对象这两个概念将贯穿驱动开发的一切。
+
+至此，初级驱动开发学习完毕，勉强算入门了。
+
+后面开始进阶学习高级驱动相关知识。
+
+高级驱动开发里面，代码量大，复杂，不会从零开始写驱动（参考内核提供的驱动代码，厂家提供的代码），需要**分析代码，透彻实现原理**，移植代码。使用现成的大量模板，一般只写差异化代码。

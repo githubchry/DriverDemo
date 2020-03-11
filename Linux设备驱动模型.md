@@ -106,9 +106,94 @@ chry@chry-ubuntu20:/sys/class/input/event0/device$
 
 根据`name`显示出来的信息可以看出来这个是一个**休眠按钮**，结案！
 
+##### [usb设备在sysfs中的命名规范](https://www.cnblogs.com/erhu-67786482/p/12054521.html)
+
+```shell
+root@firefly:/sys/bus/usb/devices# ls
+1-0:1.0  1-1:1.0    1-1.2:1.0  1-1.3:1.1  2-0:1.0  usb1  usb4
+1-1      1-1.1:1.0  1-1.3      1-1.4      3-0:1.0  usb2
+1-1.1    1-1.2      1-1.3:1.0  1-1.4:1.0  4-0:1.0  usb3
+root@firefly:/sys/bus/usb/devices# 
+
+```
+
+设备实际上是接入了4个usb设备，一般直接查看标识符最全的，命名规则如下：
+
+"root-hub的编号"-"设备(或者hub)插入的端口号"[."设备(或者hub)插入的端口号"]:"USB设备配置号"."接口的编号"
+
+- 设备上会有多个hub
+
+- 每个hub上面有多个端口用来插入设备（端口号固定命名可能是1.1，1.2，1.3，...，1.x，也可能是1,2,3...x）
+
+- 每个已经插入的设备都会分配设备配置号和接口编号
+
+- 只有已经插入的设备才会显示在这
+
+  
+
+  比如1-1.4:1.0就是interface的目录，表示root hub1-port1.4上的configuration1的interface0,
+
+  命名规则是：roothub-port:configuration.interface.
+
+```shell
+root@firefly:/sys/bus/usb/devices# ls  1-1.1:1.0/
+authorized         bInterfaceProtocol  ep_02     net                   uevent
+bAlternateSetting  bInterfaceSubClass  ep_81     power
+bInterfaceClass    bNumEndpoints       ep_83     subsystem
+bInterfaceNumber   driver              modalias  supports_autosuspend
+root@firefly:/sys/bus/usb/devices# ls  1-1.2:1.0/
+authorized         bInterfaceProtocol  ep_02     net                   uevent
+bAlternateSetting  bInterfaceSubClass  ep_81     power
+bInterfaceClass    bNumEndpoints       ep_83     subsystem
+bInterfaceNumber   driver              modalias  supports_autosuspend
+root@firefly:/sys/bus/usb/devices# ls  1-1.3:1.0/
+authorized          ep_83                  media0
+bAlternateSetting   iad_bFirstInterface    modalias
+bInterfaceClass     iad_bFunctionClass     power
+bInterfaceNumber    iad_bFunctionProtocol  subsystem
+bInterfaceProtocol  iad_bFunctionSubClass  supports_autosuspend
+bInterfaceSubClass  iad_bInterfaceCount    uevent
+bNumEndpoints       input                  video4linux
+driver              interface
+root@firefly:/sys/bus/usb/devices# ls  1-1.4:1.0/
+authorized         bInterfaceProtocol  ep_02     net                   uevent
+bAlternateSetting  bInterfaceSubClass  ep_81     power
+bInterfaceClass    bNumEndpoints       ep_83     subsystem
+bInterfaceNumber   driver              modalias  supports_autosuspend
+```
+
+可以看到`1-1.1:1.0`、`1-1.2:1.0`和`1-1.4:1.0`下面都有一个`net`目录，`1-1.3:1.0`下有一个`input`目录，说明后者是`输入设备`，其他是`网络设备`，比如这里我接上了3个usb网卡和1个usb摄像头。
+
+进入对应的`net`目录可以看到网卡名称，进一步查看
+
+```
+root@firefly:/sys/bus/usb/devices# ls 1-1.1\:1.0/net/
+enx081f71153444
+root@firefly:/sys/bus/usb/devices# ls 1-1.2\:1.0/net/
+enx081f7117d016
+root@firefly:/sys/bus/usb/devices# ls 1-1.4\:1.0/net/
+enx081f71152dd1
+root@firefly:/sys/bus/usb/devices#   ifconfig -a
+ 
+```
+
+通过前面的方法可以看到输入设备的相关信息
+
+```shell
+root@firefly:/sys/bus/usb/devices# cat 1-1.3\:1.0/input/input4/name 
+HD USB Camera
+root@firefly:/sys/bus/usb/devices# 
+```
+
+此外，linux的默认设备管理工具`udev`就是通过侦听内核发出来的uevent来管理/dev目录下的设备文件，当设备添加/删除时，udev的守护进程侦听来自内核的uevent，以此添加或者删除/dev下的设备文件，所以udev只为已经连接的设备产生设备文件，而不会在/dev下产生大量虚无的设备文件。
+
+[udev参考](https://blog.51cto.com/seiang/1950594)
+
+`udev`这些操作可以反映到sysfs下，通过Linux默认的规则文件，udev在/dev/里为所有的设备定义了内核设备名称，比如/dev/sda、/dev/hda、/dev/fd等等。由于udev是在用户空间(user space) 运行，Linux用户可以通过自定义的规则文件，灵活地产生标识性强的设备文件名，如/dev/boot_disk、/dev/root_disk、/dev/color_printer等等。当我们遇到这种需要固定匹配修改驱动名称时可以通过修改规则文件来解决，就不需要修改内核代码了。当然这是另外一个专题了，下面继续讨论sysfs。
 
 
-暂时先关注以下三个目录：
+
+暂时先关注sysfs以下三个目录：
 
 - `/sys/devices`
   - 层级结构根据设备**分层**展示所有设备信息

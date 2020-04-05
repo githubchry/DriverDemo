@@ -10,7 +10,7 @@
 
 #include <linux/of_irq.h>     //irq
 #include <linux/interrupt.h>     //IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING
-#include <linux/interrupt.h>     //
+#include <linux/sched.h>     //
 
 #define BASEMINOR   0
 #define COUNT       1
@@ -65,6 +65,8 @@ struct keyirq_demo_desc {
     volatile uint32_t *gpio0_dr_vreg;   //数据寄存器 内存映射后的地址
     int irqno;
     struct key_event event;
+    wait_queue_head_t wq_head;   //等待队列头
+    int key_state;  //表示是否有按键数据到来，以唤醒阻塞休眠的标志位
 };
 
 //声明全局的设备对象
@@ -97,17 +99,15 @@ static int keyirq_demo_release(struct inode *inode, struct file *flip)
     return 0;
 }
 
-//从设备中同步读取数据 返回当前gpio0a6对应的输入输出方向和数据  pos指示从文件的哪里开始读取
+//使用阻塞方式获取key的状态
 static ssize_t keyirq_demo_read(struct file *flip, char __user *buf, size_t len, loff_t *pos)
 {
     ssize_t ret = 0; 
     //应用可能会频繁read，所以不能加普通打印
     //printk(KERN_INFO "%s,%s:%d pos:%lld\n", __FILE__, __func__, __LINE__, *pos);   
 
-    if(*pos >= 3)
-    {
-        return 0;
-    }
+    //阻塞等待（直到keyirq_demo_dev->key_state = 1）
+    wait_event_interruptible(keyirq_demo_dev->wq_head, keyirq_demo_dev->key_state); //不需要传地址，内部实现会取址
 
     if(len < sizeof(struct key_event))
     {
@@ -121,12 +121,11 @@ static ssize_t keyirq_demo_read(struct file *flip, char __user *buf, size_t len,
         printk(KERN_ERR "%s,%s:%d %ld\n", __FILE__, __func__, __LINE__, ret);
 		return -EFAULT;	
 	}
-    *pos += ret;
 
     //传递按键信息给用户空间后，把数据清空
     memset(&keyirq_demo_dev->event, 0, sizeof(struct key_event));
-
-    return 3;
+    keyirq_demo_dev->key_state = 0;
+    return sizeof(struct key_event);
 }
 
 //向设备发送数据 规则：写入“0”设置成输出模式并置低电平，写入“1”设置成输出模式并置高电平，写入“2”设置成输入模式
@@ -178,7 +177,9 @@ static 	irqreturn_t key_irq_handler(int irqno, void *devid)
         keyirq_demo_dev->event.key = KEY_ENTER;
         keyirq_demo_dev->event.val = val;
     }
-     
+    //唤醒休眠，然后设置标志位
+    wake_up_interruptible(&keyirq_demo_dev->wq_head);
+    keyirq_demo_dev->key_state = 1;
 
     return IRQ_HANDLED;
 }
@@ -282,6 +283,9 @@ static int __init keyirq_demo_init(void)
         goto err6;
     }
 
+    //初始化等待队列头
+    init_waitqueue_head(&keyirq_demo_dev->wq_head);
+    keyirq_demo_dev->key_state = 0;
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
     return 0;
 

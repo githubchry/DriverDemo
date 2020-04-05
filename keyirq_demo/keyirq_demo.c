@@ -103,6 +103,10 @@ static int keyirq_demo_release(struct inode *inode, struct file *flip)
 static ssize_t keyirq_demo_read(struct file *flip, char __user *buf, size_t len, loff_t *pos)
 {
     ssize_t ret = 0; 
+    //如果当前是非阻塞模式，并且没有数据，立马返回一个出错码
+    if(flip->f_flags & O_NONBLOCK && !keyirq_demo_dev->key_state)
+		return -EAGAIN;
+
     //应用可能会频繁read，所以不能加普通打印
     //printk(KERN_INFO "%s,%s:%d pos:%lld\n", __FILE__, __func__, __LINE__, *pos);   
 

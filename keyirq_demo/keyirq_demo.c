@@ -11,6 +11,7 @@
 #include <linux/of_irq.h>     //irq
 #include <linux/interrupt.h>     //IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING
 #include <linux/sched.h>     //
+#include <linux/poll.h>     //poll_wait
 
 #define BASEMINOR   0
 #define COUNT       1
@@ -76,13 +77,15 @@ static int keyirq_demo_open(struct inode *inode, struct file *flip);
 static int keyirq_demo_release(struct inode *inode, struct file *flip);
 static ssize_t keyirq_demo_read(struct file *flip, char __user *buf, size_t len, loff_t *pos);
 static ssize_t keyirq_demo_write(struct file *flip, const char __user *buf, size_t len, loff_t *pos);
+static unsigned int keyirq_demo_poll(struct file *flip, struct poll_table_struct *pts);
 
 struct file_operations fops = {
     .owner      = THIS_MODULE,          //拥有该结构的模块的指针，一般为THIS_MODULES 这个成员用来在它的操作还在被使用时阻止模块被卸载
     .open       = keyirq_demo_open,     
     .release    = keyirq_demo_release,
-    .read       = keyirq_demo_read,     
+    .read       = keyirq_demo_read,
     .write      = keyirq_demo_write,
+    .poll      = keyirq_demo_poll,
 };
 
 static int keyirq_demo_open(struct inode *inode, struct file *flip)
@@ -138,6 +141,26 @@ static ssize_t keyirq_demo_write(struct file *flip, const char __user *buf, size
     return 0;
 }
 
+static unsigned int keyirq_demo_poll(struct file *flip, struct poll_table_struct *pts)
+{
+    unsigned int mask = 0;
+
+    //调用poll_wait，将当前的等待队列注册到系统中
+    poll_wait(flip, &keyirq_demo_dev->wq_head, pts);
+    
+    if(!keyirq_demo_dev->key_state)
+    {
+        //无数据时返回0
+        mask = 0;
+    }
+    else
+    {
+        //有数据时返回POLLIN
+        mask |= POLL_IN;
+    }
+
+    return mask;
+}
 
 //从已经在dts自定义好的节点里面获取irqno
 static int get_irqno_from_dts_node(void)

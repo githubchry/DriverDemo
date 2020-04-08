@@ -110,8 +110,7 @@ static ssize_t keyirq_demo_read(struct file *flip, char __user *buf, size_t len,
     if(flip->f_flags & O_NONBLOCK && !keyirq_demo_dev->key_state)
 		return -EAGAIN;
 
-    //应用可能会频繁read，所以不能加普通打印
-    //printk(KERN_INFO "%s,%s:%d pos:%lld\n", __FILE__, __func__, __LINE__, *pos);   
+    printk(KERN_INFO "%s,%s:%d pos:%lld\n", __FILE__, __func__, __LINE__, *pos);   
 
     //阻塞等待（直到keyirq_demo_dev->key_state = 1）
     wait_event_interruptible(keyirq_demo_dev->wq_head, keyirq_demo_dev->key_state); //不需要传地址，内部实现会取址
@@ -125,7 +124,7 @@ static ssize_t keyirq_demo_read(struct file *flip, char __user *buf, size_t len,
     ret = copy_to_user(buf, &keyirq_demo_dev->event, sizeof(struct key_event));   
     if(0 != ret)
 	{
-        printk(KERN_ERR "%s,%s:%d %ld\n", __FILE__, __func__, __LINE__, ret);
+        printk(KERN_ERR "%s,%s:%d %d\n", __FILE__, __func__, __LINE__, ret);
 		return -EFAULT;	
 	}
 
@@ -158,6 +157,8 @@ static unsigned int keyirq_demo_poll(struct file *flip, struct poll_table_struct
         //有数据时返回POLLIN
         mask |= POLL_IN;
     }
+
+    printk(KERN_INFO "%s,%s:%d mask:%d\n", __FILE__, __func__, __LINE__, mask);   
 
     return mask;
 }
@@ -193,14 +194,14 @@ static 	irqreturn_t key_irq_handler(int irqno, void *devid)
     if (val)
     {
         //按下
-        printk(KERN_INFO "%s,%s:%d key down, irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
+        printk(KERN_ERR "%s,%s:%d key down, irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
         keyirq_demo_dev->event.key = KEY_ENTER;
         keyirq_demo_dev->event.val = val;
     }
     else
     {
         //松开
-        printk(KERN_INFO "%s,%s:%d key up, irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
+        printk(KERN_ERR "%s,%s:%d key up, irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
         keyirq_demo_dev->event.key = KEY_ENTER;
         keyirq_demo_dev->event.val = val;
     }
@@ -214,6 +215,7 @@ static 	irqreturn_t key_irq_handler(int irqno, void *devid)
 static int __init keyirq_demo_init(void)
 {
     int ret = 0;
+    uint32_t val = 0;
     
     //为全局的设备对象申请空间
     //GFP_KERNEL:如果当前空间不够用,该函数会一直阻塞
@@ -310,10 +312,13 @@ static int __init keyirq_demo_init(void)
         goto err6;
     }
 
+    // 设置gpio输入输出方向为输出
+    *keyirq_demo_dev->gpio0_ddr_vreg &= ~((uint32_t)1 << RK3288_GPIO0A7_DDR_BIT); 
+
     //初始化等待队列头
     init_waitqueue_head(&keyirq_demo_dev->wq_head);
     keyirq_demo_dev->key_state = 0;
-    printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
+    printk(KERN_ERR "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
     return 0;
 
 //err7:
@@ -350,7 +355,7 @@ static void __exit keyirq_demo_exit(void)
     kfree(keyirq_demo_dev);
 
     
-    printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
+    printk(KERN_ERR "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 }
 
 module_init(keyirq_demo_init);

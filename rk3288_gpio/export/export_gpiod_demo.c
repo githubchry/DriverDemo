@@ -4,51 +4,19 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/delay.h>     // msleep_interruptible
-#include <linux/uaccess.h>      // copy_from_user()
-#include <asm/io.h>     // ioremap 头文件
+#include <linux/uaccess.h>  // copy_from_user()
 #include <linux/slab.h>     //kmalloc
+#include <linux/delay.h>     // msleep_interruptible
+#include <linux/gpio/consumer.h>
 
+#include <linux/of.h>
+#include <linux/of_gpio.h>
 #define BASEMINOR   0
 #define COUNT       1
 #define CLASS       "chry"
 #define NAME        "gpio0a7_demo"
 
-/*
-# 获取寄存器地址
-寄存器地址 = 基地址 + 偏移量
-
-1.基地址获取
-打开TRM文档的第2章第1节
-address mapping可以看到地址分布图 
-
-找到里面的GPIO0, 基地址为FF75_0000
-
-2.偏移量
-打开TRM文档的第49章第4节 该章描述GPIO相关 仔细看每一行，不要漏掉任何一行，操你妈的英文废物
-找到 GPIO_SWPORTA_DR 得到偏移为0x0000
-找到 GPIO_SWPORTA_DDR 得到偏移为0x0004
-找到 GPIO_EXT_PORTA 得到偏移为0x0050
-
-# 寄存器地址位设置
-GPIO_SWPORTA_DDR寄存器控制GPIO的输入输出方向，32位，分别对应ABCD四组共32个引脚，0表示输入1表示输出
-GPIO_SWPORTA_DR寄存器是GPIO输出模式的数据位，32位，分别对应ABCD四组共32个引脚，如果方向是输出，置1表示输出高电平
-GPIO_EXT_PORTA寄存器是GPIO输入模式的数据位，32位，分别对应ABCD四组共32个引脚，如果方向是输出，置1表示输出高电平
-
-默认输入模式上拉
-*/
-//GPIO Operational Base
-#define RK3288_GPIO0_BASE       ((uint32_t)0xFF750000) 
-//GPIO DATA direction REGISTER 
-#define RK3288_GPIO0_DDR_BASE       ((uint32_t)RK3288_GPIO0_BASE+0x0004)   
-#define RK3288_GPIO0A7_DDR_BIT      7
-//GPIO DATA REGISTER
-#define RK3288_GPIO0_DR_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0000)     
-#define RK3288_GPIO0A7_DR_BIT       7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
-//GPIO external port register
-#define RK3288_GPIO0_EXT_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0050)     
-#define RK3288_GPIO0A7_EXT_BIT      7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
-
-#define USE_BIT_OP_MODE 0   //写了两种操作方式，bit与或方式和val读写方式
+#define RK3288_GPIO0_A7  7
 
 //设计设备对象
 struct gpio_demo_desc {
@@ -56,10 +24,7 @@ struct gpio_demo_desc {
     dev_t devno;  
     struct class *cls;
     struct device *dev;
-    struct resource *res;
-    volatile uint32_t *gpio0_ddr_vreg;  //方向寄存器 内存映射后的地址
-    volatile uint32_t *gpio0_dr_vreg;   //数据寄存器 内存映射后的地址
-    volatile uint32_t *gpio0_ext_vreg;  //输入寄存器 内存映射后的地址   输入模式时，从该寄存器获取当前外部输入状态
+	struct gpio_desc *gpiod;
 };
 
 //声明全局的设备对象
@@ -97,9 +62,6 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
 {
     char data[4] = {0};   //返回到用户空间的数据
     ssize_t ret = 0; 
-    uint32_t ddr = *gpio_demo_dev->gpio0_ddr_vreg & ((uint32_t)1 << RK3288_GPIO0A7_DDR_BIT);
-    uint32_t dr = *gpio_demo_dev->gpio0_dr_vreg & ((uint32_t)1 << RK3288_GPIO0A7_DR_BIT);
-    uint32_t ext = *gpio_demo_dev->gpio0_ext_vreg & ((uint32_t)1 << RK3288_GPIO0A7_EXT_BIT);
 
     printk(KERN_INFO "%s,%s:%d pos:%lld\n", __FILE__, __func__, __LINE__, *pos);   
 
@@ -113,23 +75,9 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
         return -ENOMEM;
     }
 
-    //printk(KERN_ERR "%s,%s:%d gpiod_get_direction ddr[%d], dr[%d]\n", __FILE__, __func__, __LINE__, gpiod_get_direction(gpio_to_desc(7)), gpiod_get_value(gpio_to_desc(7)));  //#include <asm/gpio.h>     // GPIO头文件
-    //printk(KERN_ERR "%s,%s:%d gpiod_get_direction ddr[%x], dr[%x], ext[%x]\n", __FILE__, __func__, __LINE__, ddr, dr, ext);
-    //printk(KERN_ERR "%s,%s:%d gpiod_get_direction ddr[%x], dr[%x], ext[%x]\n", __FILE__, __func__, __LINE__, *gpio_demo_dev->gpio0_ddr_vreg, *gpio_demo_dev->gpio0_dr_vreg, *gpio_demo_dev->gpio0_ext_vreg);
-
-    if (0 == ddr)
-    {
-        //输入模式
-        data[0] = '1';
-        ext ? (data[1] = '1') : (data[1] = '0');
-    }
-    else
-    {
-        // 输出模式
-        data[0] = '0';
-        dr ? (data[1] = '1') : (data[1] = '0');
-    }
-
+    data[0] = '0' + gpiod_get_value(gpio_demo_dev->gpiod);
+    //这里使用了最新的gpiod的接口获取当前gpio的方向
+    data[1] = '0' + gpiod_get_direction(gpio_demo_dev->gpiod);
     data[2] = '\n';     //换行符 cat的时候打印好看一点
 
     // 将内核空间的数据拷贝到用户空间 成功返回0，失败返回没有拷贝成功的数据字节数
@@ -142,7 +90,7 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
     *pos += 3;
 
     //gpio_demo_dev->gpio0_ddr_vreg
-    printk(KERN_ERR "%s,%s:%d=> %c%c\n", __FILE__, __func__, __LINE__, data[0], data[1]);
+    printk(KERN_INFO "%s,%s:%d=> %c,%c\n", __FILE__, __func__, __LINE__, data[0], data[1]);
     return 3;
 }
 
@@ -150,6 +98,7 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
 static ssize_t gpio_demo_write(struct file *flip, const char __user *buf, size_t len, loff_t *pos)
 {   
     char data[2];   //存放用户空间传进来的数据
+    int ret = 0;
 
     //这里不能直接打印用户空间传进来的数据
     printk(KERN_INFO "%s,%s:%d len:%d\n", __FILE__, __func__, __LINE__, len);   
@@ -175,35 +124,53 @@ static ssize_t gpio_demo_write(struct file *flip, const char __user *buf, size_t
     switch (data[0])
     {
     case '0':
-        // 设置gpio输入输出方向为输出
-        *gpio_demo_dev->gpio0_ddr_vreg |= 1 << RK3288_GPIO0A7_DDR_BIT;
-        // 设置gpio输出低电平
-        *gpio_demo_dev->gpio0_dr_vreg &= ~((uint32_t)1 << RK3288_GPIO0A7_DR_BIT); 
+        ret = gpiod_direction_output(gpio_demo_dev->gpiod, 0); 
         break;
     case '1':
-        // 设置gpio输入输出方向为输出
-        *gpio_demo_dev->gpio0_ddr_vreg |= 1 << RK3288_GPIO0A7_DDR_BIT;
-        // 设置gpio输出高电平
-        *gpio_demo_dev->gpio0_dr_vreg |= 1 << RK3288_GPIO0A7_DR_BIT;
+        ret = gpiod_direction_output(gpio_demo_dev->gpiod, 1); 
         break;
     case '2':
         // 设置gpio输入输出方向为输入
-        *gpio_demo_dev->gpio0_ddr_vreg &= ~((uint32_t)1 << RK3288_GPIO0A7_DDR_BIT); 
+        ret = gpiod_direction_input(gpio_demo_dev->gpiod); 
         break;
     default:
         return -EINVAL;
         break;
     }
-    printk(KERN_INFO "%s,%s:%d len:%d\n", __FILE__, __func__, __LINE__, len);
+    printk(KERN_INFO "%s,%s:%d ret:%d, len:%d\n", __FILE__, __func__, __LINE__, ret, len);
     return len;     //使用echo 1 > /dev/gpio_demo, 如果返回0 echo就会一直重试 所以要么返回小于0的错误码 要么返回实际值
 }
+//*
+//从已经在dts自定义好的节点里面获取irqno
+static struct gpio_desc * get_gpio_desc_from_dts_node(void)
+{
+    int gpio = -1;
+     
+    //1.获取到设备树中的节点
+    struct device_node *np = of_find_node_by_path("/chry_gpio0a7_node");
+    if (NULL == np)
+    {
+        printk(KERN_ERR "%s,%s:%d find node failed\n", __FILE__, __func__, __LINE__);
+        goto exit;
+    }
 
+    //2.通过节点获取gpio号码    
+    gpio = of_get_named_gpio(np, "chry-gpios", 0);
+    if (0 > gpio)
+    {
+        printk(KERN_ERR "%s,%s:%d of_get_named_gpio_flags failed\n", __FILE__, __func__, __LINE__);
+        goto exit;
+    }
+
+    printk(KERN_INFO "%s,%s:%d ojbk! gpio %d\n", __FILE__, __func__, __LINE__, gpio);
+exit:
+
+    return gpio_to_desc(gpio);
+}
+//*/
 static int __init gpio_demo_init(void)
 {
     int ret = 0;
-#if !USE_BIT_OP_MODE
-    uint32_t val = 0;
-#endif
 
     //GFP_KERNEL:如果当前空间不够用,该函数会一直阻塞
     gpio_demo_dev = kmalloc(sizeof(struct gpio_demo_desc), GFP_KERNEL);
@@ -253,75 +220,44 @@ static int __init gpio_demo_init(void)
         goto err4;
 	}
 
-    // 6.映射虚拟寄存器地址 uint32_t是4字节  控制输入输出方向
-    gpio_demo_dev->gpio0_ddr_vreg = (uint32_t *)ioremap(RK3288_GPIO0_DDR_BASE, 4); 
-    if(NULL == gpio_demo_dev->gpio0_ddr_vreg)
-    {
-        printk(KERN_ERR "%s,%s:%d\n\tioremap[%p, 0x%x] failed\n", 
-            __FILE__, __func__, __LINE__,  gpio_demo_dev->gpio0_ddr_vreg, RK3288_GPIO0_DDR_BASE);
-        ret = -1;
+    //-------------------------------------------------------------------------
+    //chry => chry-gpios 从设备树获取chry-gpios
+    gpio_demo_dev->gpiod = get_gpio_desc_from_dts_node();
+    if (IS_ERR(gpio_demo_dev->gpiod))
+	{
+        printk(KERN_ERR "%s,%s:%d devm_gpiod_get failed \n", __FILE__, __func__, __LINE__);
         goto err5;
-    }
+	}
 
-    // 7.映射虚拟寄存器地址 uint32_t是4字节  数据寄存器
-    gpio_demo_dev->gpio0_dr_vreg  = (uint32_t *)ioremap(RK3288_GPIO0_DR_BASE, 4); 
-    if(NULL == gpio_demo_dev->gpio0_dr_vreg)
+    /* 
+    8. 设置gpio7的输入输出方向为输出, 同时输出1(高电平)
+    echo out > direction + echo 0 > value = echo low > direction
+    echo out > direction + echo 1 > value = echo high > direction
+    gpio_set_value()与gpio_direction_output()有什么区别？
+    如果使用该GPIO时，不会动态的切换输入输出，建议在开始时就设置好GPIO 输出方向，后面拉高拉低时使用gpio_set_value()接口，而不建议使用gpio_direction_output(), 
+    因为gpio_direction_output接口里面有mutex锁，对中断上下文调用会有错误异常，且相比 gpio_set_value，gpio_direction_output 所做事情更多，浪费。
+    */
+    ret = gpiod_direction_output(gpio_demo_dev->gpiod, 1); 
+    if(ret != 0)
     {
-        printk(KERN_ERR "%s,%s:%d\n\tioremap[%p, 0x%x] failed\n", 
-            __FILE__, __func__, __LINE__, gpio_demo_dev->gpio0_dr_vreg, RK3288_GPIO0_DR_BASE);
-        ret = -1;
+        printk(KERN_ERR "%s,%s:%d gpiod_direction_output[1] failed %d \n", __FILE__, __func__, __LINE__, ret);
         goto err6;
     }
-
-    // 8.映射虚拟寄存器地址 uint32_t是4字节  外部输入寄存器
-    gpio_demo_dev->gpio0_ext_vreg  = (uint32_t *)ioremap(RK3288_GPIO0_EXT_BASE, 4); 
-    if(NULL == gpio_demo_dev->gpio0_ext_vreg)
-    {
-        printk(KERN_ERR "%s,%s:%d\n\tioremap[%p, 0x%x] failed\n", 
-            __FILE__, __func__, __LINE__, gpio_demo_dev->gpio0_ext_vreg, RK3288_GPIO0_EXT_BASE);
-        ret = -1;
-        goto err7;
-    }
-
-#if USE_BIT_OP_MODE
-    // 设置gpio输入输出方向为输出
-    *gpio_demo_dev->gpio0_ddr_vreg |= 1 << RK3288_GPIO0A7_DDR_BIT;
-    // 设置gpio输出高电平
-    *gpio_demo_dev->gpio0_dr_vreg |= 1 << RK3288_GPIO0A7_DR_BIT;
-
+    // 延时500ms, 根据官方资料[https://www.kernel.org/doc/Documentation/timers/timers-howto.txt], 大于20ms的延时需要用msleep_interruptible
     msleep_interruptible(500);
 
-    // 设置gpio输出低电平
-    *gpio_demo_dev->gpio0_dr_vreg &= ~((uint32_t)1 << RK3288_GPIO0A7_DR_BIT); 
-
-#else
-    // 设置gpio输入输出方向为输出
-    val = readl(gpio_demo_dev->gpio0_ddr_vreg);
-    val |= 1 << RK3288_GPIO0A7_DDR_BIT;
-    writel(val, gpio_demo_dev->gpio0_ddr_vreg);
-   
-    // 设置gpio输出高电平
-    val = readl(gpio_demo_dev->gpio0_dr_vreg);
-    val |= 1 << RK3288_GPIO0A7_DR_BIT;
-    writel(val, gpio_demo_dev->gpio0_dr_vreg);   
-
+    // 设置为低电平   echo 0 > value
+    gpiod_set_value(gpio_demo_dev->gpiod, 0); 
     msleep_interruptible(500);
 
-    // 设置gpio输出低电平
-    val = readl(gpio_demo_dev->gpio0_dr_vreg);
-    val &= ~(1 << RK3288_GPIO0A7_DR_BIT);
-    writel(val, gpio_demo_dev->gpio0_dr_vreg);  
-#endif
+    // 设置为高电平   echo 1 > value
+    gpiod_set_value(gpio_demo_dev->gpiod, 1); 
 
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
     return 0;
 
-//err8:
-    iounmap(gpio_demo_dev->gpio0_ext_vreg);
-err7:
-    iounmap(gpio_demo_dev->gpio0_dr_vreg);
 err6:
-    iounmap(gpio_demo_dev->gpio0_ddr_vreg);
+    gpiod_put(gpio_demo_dev->gpiod);
 err5:
     device_destroy(gpio_demo_dev->cls, gpio_demo_dev->devno);
 err4:
@@ -339,28 +275,15 @@ err0:
 
 static void __exit gpio_demo_exit(void)
 {
-#if USE_BIT_OP_MODE
-    // 设置gpio输出低电平
-    *gpio_demo_dev->gpio0_dr_vreg &= ~((uint32_t)1 << RK3288_GPIO0A7_DR_BIT); 
-#else
-    uint32_t val;
-    // 设置gpio输出低电平
-    val = readl(gpio_demo_dev->gpio0_dr_vreg);
-    val &= ~(1 << RK3288_GPIO0A7_DR_BIT);
-    writel(val, gpio_demo_dev->gpio0_dr_vreg);   
-#endif
-    // 释放映射
-    iounmap(gpio_demo_dev->gpio0_ext_vreg);
-    iounmap(gpio_demo_dev->gpio0_ddr_vreg);
-    iounmap(gpio_demo_dev->gpio0_dr_vreg);
-
+    gpiod_set_value(gpio_demo_dev->gpiod, 0); 
+    
+    gpiod_put(gpio_demo_dev->gpiod);
     device_destroy(gpio_demo_dev->cls, gpio_demo_dev->devno);
     class_destroy(gpio_demo_dev->cls);
     cdev_del(&gpio_demo_dev->cdev);
     unregister_chrdev_region(gpio_demo_dev->devno, COUNT);
     kfree(gpio_demo_dev);
 
-    
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 }
 

@@ -167,7 +167,7 @@ static unsigned int keyirq_demo_poll(struct file *flip, struct poll_table_struct
 static int get_irqno_from_dts_node(void)
 {
     int irqno = -1;
-    //1.获取到设备数中的节点
+    //1.获取到设备树中的节点
     struct device_node *np = of_find_node_by_path("/key_irq_node");
     if (NULL == np)
     {

@@ -6,6 +6,7 @@ NAME = export_gpio_demo
 ifneq ($(KERNELRELEASE),)
 
 obj-m := $(NAME).o
+obj-m += export_gpiod_demo.o
 
 else
 
@@ -28,8 +29,10 @@ clean:
 # 这两个也就是测试用一下 以后编译完直接把模块上传上去 根本用不到这个
 load:
 	sudo insmod $(NAME).ko
+	sudo insmod export_gpiod_demo.ko
 
 unload:
 	sudo rmmod $(NAME)
+	sudo rmmod export_gpiod_demo
 
 endif

@@ -9,6 +9,7 @@
 #include <linux/slab.h>     //kmalloc
 
 #include <linux/of_irq.h>     //irq
+#include <linux/of_gpio.h>
 #include <linux/interrupt.h>     //IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING
 #include <linux/sched.h>     //
 #include <linux/poll.h>     //poll_wait
@@ -172,18 +173,29 @@ static unsigned int keyirq_demo_poll(struct file *flip, struct poll_table_struct
 static int get_irqno_from_dts_node(void)
 {
     int irqno = -1;
+    int gpio = -1;
     //1.获取到设备树中的节点
-    struct device_node *np = of_find_node_by_path("/key_irq_node");
+    struct device_node *np = of_find_node_by_path("/chry_gpio0a7_node");
     if (NULL == np)
     {
         printk(KERN_ERR "%s,%s:%d find node failed\n", __FILE__, __func__, __LINE__);
         goto exit;
     }
-    //2.通过节点获取中断号码
-    irqno = irq_of_parse_and_map(np, 0);    //第二个参数0表示第0个中断，因为自定义的设备树节点只定义了一个中断
+
+    //2.通过节点获取gpio号码
+    gpio = of_get_named_gpio(np, "chry-gpios", 0);
+    if (!gpio_is_valid(gpio))
+    {
+        printk(KERN_ERR "%s,%s:%d of_get_named_gpio failed\n", __FILE__, __func__, __LINE__);
+        goto exit;
+    }
+
+    //3.通过gpio号码获取中断号码
+    irqno = __gpio_to_irq(gpio);
+    //irqno = irq_of_parse_and_map(np, 0);    //第二个参数0表示第0个中断，因为自定义的设备树节点只定义了一个中断
     if (0 > irqno)
     {
-        printk(KERN_ERR "%s,%s:%d irq_of_parse_and_map failed\n", __FILE__, __func__, __LINE__);
+        printk(KERN_ERR "%s,%s:%d __gpio_to_irq failed\n", __FILE__, __func__, __LINE__);
         goto exit;
     }
 

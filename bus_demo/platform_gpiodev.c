@@ -25,11 +25,15 @@ GPIO_SWPORTA_DR寄存器是GPIO的数据位，32位，分别对应ABCD四组共3
 //GPIO Operational Base
 #define RK3288_GPIO0_BASE       ((uint32_t)0xFF750000) 
 //GPIO DATA direction REGISTER 
-#define RK3288_GPIO0_DDR_BASE       ((uint32_t)RK3288_GPIO0_BASE+0x04)   
-#define RK3288_GPIO0A7_DDR_BIT      7
+#define RK3288_GPIO0_DDR_BASE       ((uint32_t)RK3288_GPIO0_BASE+0x0004)   
+#define RK3288_GPIO0A7_DDR_BIT      7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
 //GPIO DATA REGISTER
-#define RK3288_GPIO0_DR_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x00)     
+#define RK3288_GPIO0_DR_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0000)     
 #define RK3288_GPIO0A7_DR_BIT       7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
+//GPIO external port register
+#define RK3288_GPIO0_EXT_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0050)     
+#define RK3288_GPIO0A7_EXT_BIT      7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
+
 
 //仅仅为了消除rmmod时的dmesg警告
 static void platform_gpiodev_release(struct device * dev)
@@ -41,24 +45,34 @@ static void platform_gpiodev_release(struct device * dev)
 static struct resource gpio_res[] = {
     [0] = {
         .start  = RK3288_GPIO0_DDR_BASE,
-        .end    = RK3288_GPIO0_DDR_BASE + 4 - 1,    //只用到DR和DDR两个地址, 每个地址占4字节, 从0开始算所以要-1
+        .end    = RK3288_GPIO0_DDR_BASE + 4 - 1,    //DDR地址占4字节: 0 1 2 3, start = 0, end = start + 4 - 1 = 3
         .flags  = IORESOURCE_MEM,
     },
     [1] = {
         .start  = RK3288_GPIO0_DR_BASE,
-        .end    = RK3288_GPIO0_DR_BASE + 4 - 1,    //只用到DR和DDR两个地址, 每个地址占4字节, 从0开始算所以要-1
+        .end    = RK3288_GPIO0_DR_BASE + 4 - 1,    //DR地址占4字节: 0 1 2 3, start = 0, end = start + 4 - 1 = 3
+        .flags  = IORESOURCE_MEM,
+    },
+    [2] = {
+        .start  = RK3288_GPIO0_EXT_BASE,
+        .end    = RK3288_GPIO0_EXT_BASE + 4 - 1,    //EXT地址占4字节: 0 1 2 3, start = 0, end = start + 4 - 1 = 3
         .flags  = IORESOURCE_MEM,
     },
     //中断资源 没用上，仅作演示
     //中断是没用上，但我把要操作地址位用中断资源表示并传过去，这不是规范的做法！别学！
-    [2] = {
+    [3] = {
         .start  = RK3288_GPIO0A7_DDR_BIT,  // IRQ_EINT(4),
         .end    = RK3288_GPIO0A7_DDR_BIT,  //IRQ_EINT(4),      //中断没有连续的概念 所以开始和结束一样
         .flags  = IORESOURCE_IRQ,
     },
-    [3] = {
+    [4] = {
         .start  = RK3288_GPIO0A7_DR_BIT,  // IRQ_EINT(4),
         .end    = RK3288_GPIO0A7_DR_BIT,  //IRQ_EINT(4),      //中断没有连续的概念 所以开始和结束一样
+        .flags  = IORESOURCE_IRQ,
+    },
+    [5] = {
+        .start  = RK3288_GPIO0A7_EXT_BIT,  // IRQ_EINT(4),
+        .end    = RK3288_GPIO0A7_EXT_BIT,  //IRQ_EINT(4),      //中断没有连续的概念 所以开始和结束一样
         .flags  = IORESOURCE_IRQ,
     }
 };

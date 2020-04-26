@@ -7,6 +7,7 @@
 #include <linux/mod_devicetable.h>  //struct platform_device_id
 #include <linux/uaccess.h>      // copy_from_user()
 #include <linux/delay.h>    //msleep_interruptible
+#include <asm/io.h>     // ioremap 头文件
 
 #define BASEMINOR   0
 #define COUNT       1
@@ -22,8 +23,10 @@ struct platform_gpio_desc {
     struct resource *res;
     volatile uint32_t *vreg_ddr;
     volatile uint32_t *vreg_dr;
+    volatile uint32_t *vreg_ext;
     uint32_t vreg_ddr_bit;
     uint32_t vreg_dr_bit;
+    uint32_t vreg_ext_bit;
 };
 
 //声明全局的设备对象
@@ -132,7 +135,7 @@ static int platform_gpiodrv_probe(struct platform_device *pdev)
     gpio_demo_dev->vreg_ddr = (uint32_t *)ioremap(gpio_demo_dev->res->start, resource_size(gpio_demo_dev->res)); 
     if(NULL == gpio_demo_dev->vreg_ddr)
     {
-        printk(KERN_ERR "%s,%s:%d\n\tioremap ddr[0x%llx, %lld] failed\n", 
+        printk(KERN_ERR "%s,%s:%d\n\tioremap ddr[0x%x, %d] failed\n", 
             __FILE__, __func__, __LINE__,  gpio_demo_dev->res->start, resource_size(gpio_demo_dev->res));
         ret = -1;
         goto err5;
@@ -149,17 +152,36 @@ static int platform_gpiodrv_probe(struct platform_device *pdev)
     gpio_demo_dev->vreg_dr = (uint32_t *)ioremap(gpio_demo_dev->res->start, resource_size(gpio_demo_dev->res)); 
     if(NULL == gpio_demo_dev->vreg_dr)
     {
-        printk(KERN_ERR "%s,%s:%d\n\tioremap dr[0x%llx, %lld] failed\n", 
+        printk(KERN_ERR "%s,%s:%d\n\tioremap dr[0x%x, %d] failed\n", 
             __FILE__, __func__, __LINE__,  gpio_demo_dev->res->start, resource_size(gpio_demo_dev->res));
         ret = -1;
         goto err6;
     }
 
+    gpio_demo_dev->res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
+    if(NULL == gpio_demo_dev->res)
+    {
+        printk(KERN_ERR "%s,%s:%d\n\tplatform_get_resource failed\n",  __FILE__, __func__, __LINE__);
+        ret = -1;
+        goto err7;
+    }
+
+    // 8.映射虚拟寄存器地址 输入输出方向寄存器
+    gpio_demo_dev->vreg_ext = (uint32_t *)ioremap(gpio_demo_dev->res->start, resource_size(gpio_demo_dev->res)); 
+    if(NULL == gpio_demo_dev->vreg_ddr)
+    {
+        printk(KERN_ERR "%s,%s:%d\n\tioremap ddr[0x%x, %d] failed\n", 
+            __FILE__, __func__, __LINE__,  gpio_demo_dev->res->start, resource_size(gpio_demo_dev->res));
+        ret = -1;
+        goto err7;
+    }
+
     //获取中断资源platform_get_irq效果等同于platform_get_resource(pdev, IORESOURCE_IRQ, n);但是前者返回值是int中断号
     //这里没用到irq仅仅作演示 设备驱动那边填的是地址位
     //int irqno = gpio_demo_dev->vreg_ddr_bit;
-    gpio_demo_dev->vreg_ddr_bit = gpio_demo_dev->vreg_ddr_bit;
-    gpio_demo_dev->vreg_dr_bit = gpio_demo_dev->vreg_dr_bit;
+    gpio_demo_dev->vreg_ddr_bit = platform_get_irq(pdev, 0);
+    gpio_demo_dev->vreg_dr_bit = platform_get_irq(pdev, 1);
+    gpio_demo_dev->vreg_ext_bit = platform_get_irq(pdev, 2);
 
     // 8.硬件初始化 默认先配置ddr寄存器为输出 dr寄存器输出低电平
     // 设置gpio输入输出方向为输出
@@ -193,8 +215,10 @@ static int platform_gpiodrv_probe(struct platform_device *pdev)
     printk(KERN_INFO "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 
     return 0;
-    
-//err7:
+  
+//err8:  
+    iounmap(gpio_demo_dev->vreg_ext);
+err7:
     iounmap(gpio_demo_dev->vreg_dr);
 err6:
     iounmap(gpio_demo_dev->vreg_ddr);
@@ -250,6 +274,7 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
     ssize_t ret = 0; 
     uint32_t ddr = *gpio_demo_dev->vreg_ddr & ((uint32_t)1 << gpio_demo_dev->vreg_ddr_bit);
     uint32_t dr = *gpio_demo_dev->vreg_dr & ((uint32_t)1 << gpio_demo_dev->vreg_dr_bit);
+    uint32_t ext = *gpio_demo_dev->vreg_ext & ((uint32_t)1 << gpio_demo_dev->vreg_ext_bit);
 
     printk(KERN_INFO "%s,%s:%d pos:%lld\n", __FILE__, __func__, __LINE__, *pos);   
 
@@ -263,8 +288,18 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
         return -ENOMEM;
     }
 
-    ddr ? (data[0] = '1') : (data[0] = '0');
-    dr ? (data[1] = '1') : (data[1] = '0');
+    if (0 == ddr)
+    {
+        //输入模式
+        data[0] = '1';
+        ext ? (data[1] = '1') : (data[1] = '0');
+    }
+    else
+    {
+        // 输出模式
+        data[0] = '0';
+        dr ? (data[1] = '1') : (data[1] = '0');
+    }
 
     data[2] = '\n';     //换行符 cat的时候打印好看一点
 
@@ -272,7 +307,7 @@ static ssize_t gpio_demo_read(struct file *flip, char __user *buf, size_t len, l
     ret = copy_to_user(buf, data, 3);   
     if(0 != ret)
 	{
-        printk(KERN_ERR "%s,%s:%d %ld\n", __FILE__, __func__, __LINE__, ret);
+        printk(KERN_ERR "%s,%s:%d %d\n", __FILE__, __func__, __LINE__, ret);
 		return -EFAULT;	
 	}
     *pos += 3;
@@ -288,7 +323,7 @@ static ssize_t gpio_demo_write(struct file *flip, const char __user *buf, size_t
     char data[2];   //存放用户空间传进来的数据
 
     //这里不能直接打印用户空间传进来的数据
-    printk(KERN_INFO "%s,%s:%d len:%ld\n", __FILE__, __func__, __LINE__, len);   
+    printk(KERN_INFO "%s,%s:%d len:%d\n", __FILE__, __func__, __LINE__, len);   
 
     if(len < 1 || len > 2)    
     {
@@ -330,7 +365,7 @@ static ssize_t gpio_demo_write(struct file *flip, const char __user *buf, size_t
         return -EINVAL;
         break;
     }
-    printk(KERN_INFO "%s,%s:%d len:%ld\n", __FILE__, __func__, __LINE__, len);
+    printk(KERN_INFO "%s,%s:%d len:%d\n", __FILE__, __func__, __LINE__, len);
     return len;     //使用echo 1 > /dev/gpio_demo, 如果返回0 echo就会一直重试 所以要么返回小于0的错误码 要么返回实际值
 }
 

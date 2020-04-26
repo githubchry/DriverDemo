@@ -40,11 +40,14 @@ GPIO_SWPORTA_DR寄存器是GPIO的数据位，32位，分别对应ABCD四组共3
 //GPIO Operational Base
 #define RK3288_GPIO0_BASE       ((uint32_t)0xFF750000) 
 //GPIO DATA direction REGISTER 
-#define RK3288_GPIO0_DDR_BASE       ((uint32_t)RK3288_GPIO0_BASE+0x04)   
+#define RK3288_GPIO0_DDR_BASE       ((uint32_t)RK3288_GPIO0_BASE+0x0004)   
 #define RK3288_GPIO0A7_DDR_BIT      7
 //GPIO DATA REGISTER
-#define RK3288_GPIO0_DR_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x00)     
+#define RK3288_GPIO0_DR_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0000)     
 #define RK3288_GPIO0A7_DR_BIT       7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
+//GPIO external port register
+#define RK3288_GPIO0_EXT_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0050)     
+#define RK3288_GPIO0A7_EXT_BIT      7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
 
 #define USE_BIT_OP_MODE 0   //写了两种操作方式，bit与或方式和val读写方式
 
@@ -64,6 +67,8 @@ struct keyirq_demo_desc {
     struct resource *res;
     volatile uint32_t *gpio0_ddr_vreg;  //方向寄存器 内存映射后的地址
     volatile uint32_t *gpio0_dr_vreg;   //数据寄存器 内存映射后的地址
+    volatile uint32_t *gpio0_ext_vreg;  //输入寄存器 内存映射后的地址   输入模式时，从该寄存器获取当前外部输入状态
+
     int irqno;
     struct key_event event;
     wait_queue_head_t wq_head;   //等待队列头
@@ -190,7 +195,9 @@ exit:
 static 	irqreturn_t key_irq_handler(int irqno, void *devid)
 {
     // 读取数据寄存器，获取gpio当前电平
-    uint32_t val = readl(keyirq_demo_dev->gpio0_dr_vreg) & (1 << RK3288_GPIO0A7_DDR_BIT);
+
+    uint32_t val = *keyirq_demo_dev->gpio0_ext_vreg & ((uint32_t)1 << RK3288_GPIO0A7_EXT_BIT);
+    //uint32_t val = readl(keyirq_demo_dev->gpio0_ext_vreg) & (1 << RK3288_GPIO0A7_DDR_BIT);
     if (val)
     {
         //按下
@@ -215,7 +222,6 @@ static 	irqreturn_t key_irq_handler(int irqno, void *devid)
 static int __init keyirq_demo_init(void)
 {
     int ret = 0;
-    uint32_t val = 0;
     
     //为全局的设备对象申请空间
     //GFP_KERNEL:如果当前空间不够用,该函数会一直阻塞
@@ -267,30 +273,6 @@ static int __init keyirq_demo_init(void)
 	}
     //-------------------------------------------------------------------------
     //硬件初始化：地址映射或者申请中断号
-    keyirq_demo_dev->irqno = get_irqno_from_dts_node();
-    //申请中断
-    /*
-    参数1： irq 	设备对应的中断号
-    参数2： handler 	中断的处理函数 
-        typedef irqreturn_t (*irq_handler_t)(int, void *);
-    参数3：flags 	触发方式
-        #define IRQF_TRIGGER_NONE	0x00000000  //内部控制器触发中断的时候的标志
-        #define IRQF_TRIGGER_RISING	0x00000001 //上升沿
-        #define IRQF_TRIGGER_FALLING	0x00000002 //下降沿
-        #define IRQF_TRIGGER_HIGH	0x00000004  // 高点平
-        #define IRQF_TRIGGER_LOW	0x00000008 //低电平触发
-    参数4：name 	中断的描述，自定义,主要是给用户查看的
-        /proc/interrupts
-    参数5：dev 	传递给参数2中函数指针的值
-    返回值： 正确为0，错误非0
-    */
-    ret = request_irq(keyirq_demo_dev->irqno, key_irq_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, NAME, NULL);
-    if(ret != 0)
-    {
-        printk(KERN_ERR "%s,%s:%d request_irq failed %d \n", __FILE__, __func__, __LINE__, ret);
-        goto err0;
-    }
-
     //-------------------------------------------------------------------------
     // 6.映射虚拟寄存器地址 uint32_t是4字节  控制输入输出方向
     keyirq_demo_dev->gpio0_ddr_vreg = (uint32_t *)ioremap(RK3288_GPIO0_DDR_BASE, 4); 
@@ -312,16 +294,56 @@ static int __init keyirq_demo_init(void)
         goto err6;
     }
 
-    // 设置gpio输入输出方向为输出
+    // 8.映射虚拟寄存器地址 uint32_t是4字节  外部输入寄存器
+    keyirq_demo_dev->gpio0_ext_vreg  = (uint32_t *)ioremap(RK3288_GPIO0_EXT_BASE, 4); 
+    if(NULL == keyirq_demo_dev->gpio0_ext_vreg)
+    {
+        printk(KERN_ERR "%s,%s:%d\n\tioremap[%p, 0x%x] failed\n", 
+            __FILE__, __func__, __LINE__, keyirq_demo_dev->gpio0_ext_vreg, RK3288_GPIO0_EXT_BASE);
+        ret = -1;
+        goto err7;
+    }
+
+    //-------------------------------------------------------------------------
+    // 设置gpio输入输出方向为输入
     *keyirq_demo_dev->gpio0_ddr_vreg &= ~((uint32_t)1 << RK3288_GPIO0A7_DDR_BIT); 
+
+    keyirq_demo_dev->irqno = get_irqno_from_dts_node();
+    //申请中断
+    /*
+    参数1： irq 	设备对应的中断号
+    参数2： handler 	中断的处理函数 
+        typedef irqreturn_t (*irq_handler_t)(int, void *);
+    参数3：flags 	触发方式
+        #define IRQF_TRIGGER_NONE	0x00000000  //内部控制器触发中断的时候的标志
+        #define IRQF_TRIGGER_RISING	0x00000001 //上升沿
+        #define IRQF_TRIGGER_FALLING    0x00000002 //下降沿
+        #define IRQF_TRIGGER_HIGH	0x00000004  // 高点平
+        #define IRQF_TRIGGER_LOW	0x00000008 //低电平触发
+    参数4：name 	中断的描述，自定义,主要是给用户查看的
+        /proc/interrupts
+    参数5：dev 	传递给参数2中函数指针的值
+    返回值： 正确为0，错误非0
+    */
+    ret = request_irq(keyirq_demo_dev->irqno, key_irq_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, NAME, NULL);
+    if(ret != 0)
+    {
+        printk(KERN_ERR "%s,%s:%d request_irq failed %d \n", __FILE__, __func__, __LINE__, ret);
+        goto err8;
+    }
 
     //初始化等待队列头
     init_waitqueue_head(&keyirq_demo_dev->wq_head);
     keyirq_demo_dev->key_state = 0;
+
     printk(KERN_ERR "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
     return 0;
 
-//err7:
+//err9:
+    free_irq(keyirq_demo_dev->irqno, NULL);  
+err8:
+    iounmap(keyirq_demo_dev->gpio0_ext_vreg);
+err7:
     iounmap(keyirq_demo_dev->gpio0_dr_vreg);
 err6:
     iounmap(keyirq_demo_dev->gpio0_ddr_vreg);
@@ -342,11 +364,12 @@ err0:
 
 static void __exit keyirq_demo_exit(void)
 {
-    // 释放映射
-    iounmap(keyirq_demo_dev->gpio0_ddr_vreg);
-    iounmap(keyirq_demo_dev->gpio0_dr_vreg);
     //释放中断
     free_irq(keyirq_demo_dev->irqno, NULL);  
+    // 释放映射
+    iounmap(keyirq_demo_dev->gpio0_ext_vreg);
+    iounmap(keyirq_demo_dev->gpio0_ddr_vreg);
+    iounmap(keyirq_demo_dev->gpio0_dr_vreg);
 
     device_destroy(keyirq_demo_dev->cls, keyirq_demo_dev->devno);
     class_destroy(keyirq_demo_dev->cls);
@@ -354,7 +377,6 @@ static void __exit keyirq_demo_exit(void)
     unregister_chrdev_region(keyirq_demo_dev->devno, COUNT);
     kfree(keyirq_demo_dev);
 
-    
     printk(KERN_ERR "%s,%s:%d ojbk\n", __FILE__, __func__, __LINE__);
 }
 

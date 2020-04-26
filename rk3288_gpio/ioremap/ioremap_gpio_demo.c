@@ -40,7 +40,7 @@ GPIO_EXT_PORTA寄存器是GPIO输入模式的数据位，32位，分别对应ABC
 #define RK3288_GPIO0_BASE       ((uint32_t)0xFF750000) 
 //GPIO DATA direction REGISTER 
 #define RK3288_GPIO0_DDR_BASE       ((uint32_t)RK3288_GPIO0_BASE+0x0004)   
-#define RK3288_GPIO0A7_DDR_BIT      7
+#define RK3288_GPIO0A7_DDR_BIT      7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
 //GPIO DATA REGISTER
 #define RK3288_GPIO0_DR_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0000)     
 #define RK3288_GPIO0A7_DR_BIT       7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
@@ -57,8 +57,8 @@ struct gpio_demo_desc {
     struct class *cls;
     struct device *dev;
     struct resource *res;
-    volatile uint32_t *gpio0_ddr_vreg;  //方向寄存器 内存映射后的地址
-    volatile uint32_t *gpio0_dr_vreg;   //数据寄存器 内存映射后的地址
+    volatile uint32_t *gpio0_ddr_vreg;  //方向寄存器 内存映射后的地址   
+    volatile uint32_t *gpio0_dr_vreg;   //数据寄存器 内存映射后的地址   输出模式时，从该寄存器读写当前内部输出状态
     volatile uint32_t *gpio0_ext_vreg;  //输入寄存器 内存映射后的地址   输入模式时，从该寄存器获取当前外部输入状态
 };
 

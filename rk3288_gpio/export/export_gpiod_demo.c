@@ -156,9 +156,9 @@ static struct gpio_desc * get_gpio_desc_from_dts_node(void)
 
     //2.通过节点获取gpio号码    
     gpio = of_get_named_gpio(np, "chry-gpios", 0);
-    if (0 > gpio)
+    if (!gpio_is_valid(gpio))
     {
-        printk(KERN_ERR "%s,%s:%d of_get_named_gpio_flags failed\n", __FILE__, __func__, __LINE__);
+        printk(KERN_ERR "%s,%s:%d of_get_named_gpio failed\n", __FILE__, __func__, __LINE__);
         goto exit;
     }
 

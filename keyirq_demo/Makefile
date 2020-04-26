@@ -23,8 +23,9 @@ PWD:=$(shell pwd)
 
 module:
 	make -C $(KERNELDIR) M=$(PWD) modules
-	$(CC) $(APPNAME).c -o $(MODNAME)
+	$(CC) $(APPNAME).c -o $(APPNAME)
 	cp *.ko /srv/mnt/02rk3288
+	cp $(APPNAME) /srv/mnt/02rk3288
 
 clean:
 	make -C $(KERNELDIR) M=$(PWD) clean

@@ -50,6 +50,8 @@ GPIO_SWPORTA_DR寄存器是GPIO的数据位，32位，分别对应ABCD四组共3
 #define RK3288_GPIO0_EXT_BASE        ((uint32_t)RK3288_GPIO0_BASE+0x0050)     
 #define RK3288_GPIO0A7_EXT_BIT      7   //[7:0]表示GPIOn_A[7:0]     [15:8]表示GPIOn_B[7:0]   [23:16]表示GPIOn_C[7:0]   [31:24]表示GPIOn_D[7:0] 
 
+#define RK3288_GPIO0A7_IRQ_BIT      7
+
 #define USE_BIT_OP_MODE 0   //写了两种操作方式，bit与或方式和val读写方式
 
 #define KEY_ENTER   28
@@ -170,9 +172,24 @@ static unsigned int keyirq_demo_poll(struct file *flip, struct poll_table_struct
 }
 
 //从已经在dts自定义好的节点里面获取irqno
+/*
+/ {
+	key_irq_node {
+		compatible = "test_key";
+		interrupt-parent = <&gpio0>;	//继承于rk3288.dtis里面的gpio0
+		interrupts = <0 3>;		//使用了gpio0里面第0组中断，触发方式为4，4表示触发方式 0248
+	};
+	
+	chry_gpio0a7_node {
+		compatible = "chry_gpio0a7";
+		chry-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+	};
+};
+*/
 static int get_irqno_from_dts_node(void)
 {
     int irqno = -1;
+#if 0
     int gpio = -1;
     //1.获取到设备树中的节点
     struct device_node *np = of_find_node_by_path("/chry_gpio0a7_node");
@@ -191,13 +208,32 @@ static int get_irqno_from_dts_node(void)
     }
 
     //3.通过gpio号码获取中断号码
-    irqno = __gpio_to_irq(gpio);
-    //irqno = irq_of_parse_and_map(np, 0);    //第二个参数0表示第0个中断，因为自定义的设备树节点只定义了一个中断
+    irqno = gpio_to_irq(gpio);
+    //irqno = irq_of_parse_and_map(np, 0);    //第二个参数0表示第0个中断，返回的其实是gpio0a0引脚的中断号，最终应该返回的gpio0a7 irq = gpio0a0 irq + 7
     if (0 > irqno)
     {
         printk(KERN_ERR "%s,%s:%d __gpio_to_irq failed\n", __FILE__, __func__, __LINE__);
         goto exit;
     }
+#else
+
+    //1.获取到设备树中的节点
+    struct device_node *np = of_find_node_by_path("/chry_gpio0a7_node");
+    if (NULL == np)
+    {
+        printk(KERN_ERR "%s,%s:%d find node failed\n", __FILE__, __func__, __LINE__);
+        goto exit;
+    }
+
+    //2.获取中断号码
+    irqno = irq_of_parse_and_map(np, 0);    //第二个参数0表示第0个中断，返回的其实是gpio0a0引脚的中断号，最终应该返回的gpio0a7 irq = gpio0a0 irq + 7
+    if (0 > irqno)
+    {
+        printk(KERN_ERR "%s,%s:%d __gpio_to_irq failed\n", __FILE__, __func__, __LINE__);
+        goto exit;
+    }
+    irqno += RK3288_GPIO0A7_IRQ_BIT;
+#endif
 
     printk(KERN_INFO "%s,%s:%d ojbk! irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
 exit:

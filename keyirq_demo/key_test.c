@@ -33,7 +33,7 @@ int main()
             else
             {
                 //松开
-                printf("%s,%s:%d key down\n", __FILE__, __func__, __LINE__);
+                printf("%s,%s:%d key up\n", __FILE__, __func__, __LINE__);
             }
             
         }

@@ -218,7 +218,7 @@ static int get_irqno_from_dts_node(void)
 #else
 
     //1.获取到设备树中的节点
-    struct device_node *np = of_find_node_by_path("/chry_gpio0a7_node");
+    struct device_node *np = of_find_node_by_path("/key_irq_node");
     if (NULL == np)
     {
         printk(KERN_ERR "%s,%s:%d find node failed\n", __FILE__, __func__, __LINE__);

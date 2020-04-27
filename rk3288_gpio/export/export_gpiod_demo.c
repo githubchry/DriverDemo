@@ -16,8 +16,6 @@
 #define CLASS       "chry"
 #define NAME        "gpio0a7_demo"
 
-#define RK3288_GPIO0_A7  7
-
 //设计设备对象
 struct gpio_demo_desc {
     struct cdev cdev;

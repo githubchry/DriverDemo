@@ -384,6 +384,15 @@ struct bus_type platform_bus_type = {
 
 平台总线对象不需要我们去开发，了解它的匹配方法之后，我们就可以动手去**实例化**平台设备对象和平台驱动对象了。注意这里是实例化，因为内核代码中已经设计好了这两个对象的方法成员（结构体）。
 
+
+
+平台总线使用resource分离来实现不同平台硬件资源兼容，而代码中使用这个这个resource使用的是最原始的ioremap操作，而驱动开发更多的是从dts获取资源，后者更方便，所以需要做一些取舍，选择合适的情况去实现驱动。
+
+[resource VS dts](https://blog.csdn.net/weixin_42082222/article/details/105217444)
+
+
+
+
 #### 设备对象：platform_device
 
 ```c

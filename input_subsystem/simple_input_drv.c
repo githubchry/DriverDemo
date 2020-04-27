@@ -8,7 +8,6 @@
 
 #define NAME        "input_keyirq_demo"
 
-
 //声明全局的设备对象
 struct input_dev *simple_input_dev = NULL;
 int irqno = -1;
@@ -65,17 +64,15 @@ static 	irqreturn_t input_key_irq_handler(int irqno, void *devid)
     {
         //按下
         printk(KERN_ERR "%s,%s:%d key down, irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
-        
-        input_event(simple_input_dev, EV_KEY, KEY_POWER, 1);
-        input_sync(simple_input_dev);   //上报数据结束
     }
     else
     {
         //松开
         printk(KERN_ERR "%s,%s:%d key up, irqno： %d\n", __FILE__, __func__, __LINE__, irqno);
-        input_event(simple_input_dev, EV_KEY, KEY_POWER, 0);
-        input_sync(simple_input_dev);   //上报数据结束
     }
+    
+    input_report_key(simple_input_dev, KEY_POWER, val);
+    input_sync(simple_input_dev);   //上报数据结束
 
     return IRQ_HANDLED;
 }
@@ -93,10 +90,25 @@ static int __init simple_input_init(void)
         goto err0;
     }
 
-    // 表示当前设备能够产生按键数据
-    __set_bit(EV_KEY, simple_input_dev->evbit);
-    // 表示当前设备能够产生电源键
-    __set_bit(KEY_POWER, simple_input_dev->keybit);
+    // 初始化input device对象
+#if 1   //非必要信息
+    // cat /sys/class/input/eventn/device/name
+    simple_input_dev->name = "simple input key";
+    // cat /sys/class/input/eventn/device/phys
+    simple_input_dev->phys = "gpio0a7";
+    // cat /sys/class/input/eventn/device/uniq
+    simple_input_dev->uniq = "gpio0a7 for rk3288";
+    //描述硬件相关信息，连接方式，厂家，产品，版本 随便填
+    simple_input_dev->id.bustype = BUS_HOST;    //比如BUS_I2C、BUS_SPI、gpio用BUS_HOST  cat /sys/class/input/eventn/device/id/bustype
+    simple_input_dev->id.vendor = 0x1234;       //描述厂家  cat /sys/class/input/eventn/device/id/vendor
+    simple_input_dev->id.product = 0x8888;      //描述产品  cat /sys/class/input/eventn/device/id/product
+    simple_input_dev->id.version = 0x0001;      //描述版本  cat /sys/class/input/eventn/device/id/version
+#endif
+    // 表示当前设备能够产生按键类型数据
+    __set_bit(EV_KEY, simple_input_dev->evbit);     //等价于： simple_input_dev->evbit[BIT_WORD(EV_KEY)] |= BIT_MASK(EV_KEY);
+    
+    // 表示当前设备能够产生KEY_POWER键值
+    __set_bit(KEY_POWER, simple_input_dev->keybit); //等价于： simple_input_dev->keybit[BIT_WORD(KEY_POWER)] |= BIT_MASK(KEY_POWER);
 
     ret = input_register_device(simple_input_dev);
     if(0 != ret)

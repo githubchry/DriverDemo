@@ -10,6 +10,8 @@ obj-m += chrydrv_demo.o
 obj-m += chrydev_demo.o
 obj-m += platform_gpiodev.o
 obj-m += platform_gpiodrv.o
+obj-m += platform_keyirqdev.o
+obj-m += platform_keyirqdrv.o
 
 else
 

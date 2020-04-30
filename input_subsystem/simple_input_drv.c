@@ -100,7 +100,7 @@ static int __init simple_input_init(void)
     simple_input_dev->uniq = "gpio0a7 for rk3288";
     //描述硬件相关信息，连接方式，厂家，产品，版本 随便填
     simple_input_dev->id.bustype = BUS_HOST;    //比如BUS_I2C、BUS_SPI、gpio用BUS_HOST  cat /sys/class/input/eventn/device/id/bustype
-    simple_input_dev->id.vendor = 0x1234;       //描述厂家  cat /sys/class/input/eventn/device/id/vendor
+    simple_input_dev->id.vendor  = 0x1234;      //描述厂家  cat /sys/class/input/eventn/device/id/vendor
     simple_input_dev->id.product = 0x8888;      //描述产品  cat /sys/class/input/eventn/device/id/product
     simple_input_dev->id.version = 0x0001;      //描述版本  cat /sys/class/input/eventn/device/id/version
 #endif

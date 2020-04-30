@@ -6,7 +6,7 @@ NAME = simple_input_drv
 ifneq ($(KERNELRELEASE),)
 
 obj-m := $(NAME).o
-#obj-m += chrydrv_demo.o
+obj-m += mt_input_drv.o
 
 else
 
